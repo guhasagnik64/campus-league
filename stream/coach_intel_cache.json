@@ -1,0 +1,37 @@
+{
+    "generalScore": 85,
+    "coachReport": "Match Telemetry Complete. Share to Campus Feed before the countdown expires!",
+    "sessionPoints": 250,
+    "tenant_id": "default_facility",
+    "createdAt": "2026-09-14T17:11:49.123076Z",
+    "expiresAt": "2026-09-14T20:11:49.123076Z",
+    "isPublished": false,
+    "individualPortals": {
+        "Arin": {
+            "metadata": {
+                "topSpeed": "36.0 km/h",
+                "finalScore": 99.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 36.0 km/h | Competitive Index: 64.0"
+        },
+        "SA": {
+            "metadata": {
+                "topSpeed": "309.7 km/h",
+                "finalScore": 99.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 309.7 km/h | Competitive Index: 724.5"
+        }
+    },
+    "feedActivities": [
+        {
+            "id": "futsal_default_facility",
+            "playerName": "Match Evaluation Engine",
+            "team": "default_facility",
+            "content": "\u26a1 High-intensity futsal session processed."
+        }
+    ]
+}

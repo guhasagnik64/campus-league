@@ -1,0 +1,48 @@
+{
+    "generalScore": 75,
+    "playerImage": null,
+    "coachReport": "Dynamic Evaluation (Pass Support): Performance score set to 75% based on tactical directive: 'High intensity precision passing'.",
+    "sessionPoints": 225,
+    "drill_name": "Pass Support",
+    "date": "August 24, 2026",
+    "leaderboardFeed": [
+        {
+            "drill_id": "PASS_SUPPORT_20260824",
+            "drill_name": "Pass Support",
+            "date": "August 24, 2026",
+            "players": [
+                {
+                    "rank": 1,
+                    "name": "--drill",
+                    "player_id": "Tracked_--drill",
+                    "avatar_crop": null,
+                    "speed": "26.0 km/h",
+                    "pass_acc": "73%",
+                    "ovr_score": 74,
+                    "badge": "TOP PERFORMER"
+                }
+            ]
+        }
+    ],
+    "individualPortals": {
+        "--drill": {
+            "metadata": {
+                "position": "Midfielder",
+                "retention": "73% Accuracy",
+                "topSpeed": "26.0 km/h",
+                "finalScore": 75
+            },
+            "content": "Dynamic evaluation complete. Passing: 73 | Dribbling: 77 | OVR: 74."
+        }
+    },
+    "feedActivities": [
+        {
+            "id": "auto_PASS_SUPPORT_1",
+            "playerName": "Coach Analytics Engine",
+            "team": "System Broadcast",
+            "content": "\ud83d\udcc8 Live Assessment: --drill achieved a 75% efficiency score on Pass Support.",
+            "likes": 8,
+            "comments": []
+        }
+    ]
+}
