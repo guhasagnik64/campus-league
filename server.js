@@ -10,29 +10,30 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 
 // Firebase Admin SDK Setup
-import admin from 'firebase-admin';
+import pkg from 'firebase-admin';
+const { initializeApp, credential, firestore } = pkg;
 
-if (!admin.apps.length) {
+if (!pkg.apps.length) {
   if (process.env.FIREBASE_CREDENTIALS) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+    initializeApp({
+      credential: credential.cert(serviceAccount)
     });
   } else {
     // Fallback for local testing if file exists
     const credPath = path.join(process.cwd(), 'firebase_credentials.json');
     if (fs.existsSync(credPath)) {
       const serviceAccount = JSON.parse(fs.readFileSync(credPath, 'utf8'));
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+      initializeApp({
+        credential: credential.cert(serviceAccount)
       });
     } else {
-      admin.initializeApp();
+      initializeApp();
     }
   }
 }
 
-const db = admin.firestore();
+const db = firestore();
 
 // Resolve directory configurations for ES Modules syntax stability
 const TELEGRAM_BOT_TOKEN = "8794328547:AAHD-N7tZICeyLO0hNeB8CC7wlP5GNGXVEY";
