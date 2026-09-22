@@ -10,20 +10,29 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 
 // Firebase Admin SDK Setup
-import firebaseAdmin from 'firebase-admin';
+import admin from 'firebase-admin';
 
-if (!firebaseAdmin.apps.length) {
-  const credPath = process.env.FIREBASE_CREDENTIALS || path.join(process.cwd(), 'firebase_credentials.json');
-  if (fs.existsSync(credPath)) {
-    const serviceAccount = JSON.parse(fs.readFileSync(credPath, 'utf8'));
-    firebaseAdmin.initializeApp({
-      credential: firebaseAdmin.credential.cert(serviceAccount)
+if (!admin.apps.length) {
+  if (process.env.FIREBASE_CREDENTIALS) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
     });
   } else {
-    firebaseAdmin.initializeApp();
+    // Fallback for local testing if file exists
+    const credPath = path.join(process.cwd(), 'firebase_credentials.json');
+    if (fs.existsSync(credPath)) {
+      const serviceAccount = JSON.parse(fs.readFileSync(credPath, 'utf8'));
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+    } else {
+      admin.initializeApp();
+    }
   }
 }
-const firestoreDb = firebaseAdmin.firestore();
+
+const db = admin.firestore();
 
 // Resolve directory configurations for ES Modules syntax stability
 const TELEGRAM_BOT_TOKEN = "8794328547:AAHD-N7tZICeyLO0hNeB8CC7wlP5GNGXVEY";
