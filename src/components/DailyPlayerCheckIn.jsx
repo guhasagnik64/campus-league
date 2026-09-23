@@ -58,7 +58,7 @@ export default function DailyPlayerCheckIn({ currentUser }) {
       try {
         // FIXED: Replaced corrupted escaped string interpolation with valid template literal
         // ✅ Correct:
-        const response = await fetch(`\({API_BASE_URL}/api/player-room/\){encodeURIComponent(playerId)}`);
+       const response = await fetch(`\({API_BASE_URL}/api/player-room/\){encodeURIComponent(playerId)}`);
         if (response.ok) {
           const data = await response.json();
           setReports(data.reports || []);
