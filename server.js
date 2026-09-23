@@ -35,6 +35,9 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
+const firestoreDb = db;
+const firebaseAdmin = admin;
+
 // Resolve directory configurations for ES Modules syntax stability
 const TELEGRAM_BOT_TOKEN = "8794328547:AAHD-N7tZICeyLO0hNeB8CC7wlP5GNGXVEY";
 const STORAGE_CHAT_ID = "-1004377897036";
@@ -146,7 +149,7 @@ const photoStorage = multer.diskStorage({
       );
 
     const cleanName =
-      `ref_${cleanId}_${Date.now()}${ext}`;
+      `ref_\({cleanId}_\){Date.now()}${ext}`;
 
     cb(null, cleanName);
   }
@@ -372,7 +375,7 @@ app.post(
     }
 
     console.log(
-      `📸 [INTAKE PHOTO UPLOADED]: ${fileUrl} (Field: "${uploadedFile.fieldname}")`
+      `📸 [INTAKE PHOTO UPLOADED]: \({fileUrl} (Field: "\){uploadedFile.fieldname}")`
     );
 
     return res.json({
@@ -534,7 +537,7 @@ app.post(
       req.file.path;
 
     console.log(
-      `📸 [PLAYER PHOTO REGISTERED] ID: ${playerId} | Name: ${name} | Saved to: ${absolutePhotoPath}`
+      `📸 [PLAYER PHOTO REGISTERED] ID: \({playerId} | Name:\){name} | Saved to: ${absolutePhotoPath}`
     );
 
     // 1. Sync registered photo & player identity
@@ -803,7 +806,7 @@ app.post(
       'SA';
 
     console.log(
-      `🎬 [PROCESS VIDEO SUCCESS] File: ${uploadedFile?.filename || 'None'} | Key Name: "${uploadedFile?.fieldname || ''}"`
+      `🎬 [PROCESS VIDEO SUCCESS] File: \({uploadedFile?.filename || 'None'} | Key Name: "\){uploadedFile?.fieldname || ''}"`
     );
 
     // 1. Send success response immediately.
@@ -930,7 +933,7 @@ app.post(
       );
 
       console.log(
-        `👥 [GROUP DRILL INITIATED] Roster Size: ${players.length} | Drill: ${drill_type} | Group: ${group_id}`
+        `👥 [GROUP DRILL INITIATED] Roster Size: \({players.length} | Drill:\){drill_type} | Group: ${group_id}`
       );
 
       res.json({
@@ -1466,19 +1469,15 @@ app.post(
 app.get(
   '/api/coach/portfolio-proofs',
   async (req, res) => {
-    const coachId = req.query.coach_id || 'COACH_PRIMARY';
-
+    const coachId = req.query.coach_id;
     try {
-      const snapshot = await firestoreDb.collection('coach_portfolio_proofs')
-        .where('coach_id', '==', coachId)
-        .get();
-
+      let query = firestoreDb.collection('coach_portfolio_proofs');
+      if (coachId) {
+        query = query.where('coach_id', '==', coachId);
+      }
+      const snapshot = await query.get();
       const proofs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      res.json({
-        success: true,
-        proofs: proofs || []
-      });
+      res.json({ success: true, proofs });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -1486,44 +1485,10 @@ app.get(
 );
 
 // ========================================================================
-// 🧹 CRON JOB FOR TELEGRAM CLOUD OFFLOADING
+// 🚀 SERVER LISTENING START
 // ========================================================================
 
-cron.schedule('0 2 * * *', async () => {
-  console.log('⏰ Running midnight cloud offload cron job...');
-
-  try {
-    const nowIso = new Date().toISOString();
-    const snapshot = await firestoreDb.collection('daily_reports')
-      .where('expire_at', '<', nowIso)
-      .where('is_portfolio_proof', '==', 0)
-      .where('is_offloaded', '==', 0)
-      .get();
-
-    for (const doc of snapshot.docs) {
-      const report = doc.data();
-      const videoFilename = `${report.drill_name}_${report.player_id}.mp4`;
-      const localFilePath = path.join(uploadDir, videoFilename);
-
-      if (fs.existsSync(localFilePath)) {
-        console.log(`📤 Offloading ${videoFilename} to Telegram storage...`);
-        // Simulating Telegram upload offload
-        fs.unlinkSync(localFilePath);
-      }
-
-      await doc.ref.update({ is_offloaded: 1 });
-    }
-  } catch (err) {
-    console.error('❌ Cloud offload cron error:', err.message);
-  }
-});
-
-// ========================================================================
-// START SERVER
-// ========================================================================
-
-const PORT = process.env.PORT || 5000;
-
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
-  console.log(`🚀 Practice Intel Backend Express Server running on port ${PORT}`);
+  console.log(`🚀 [CAMPUS LEAGUE BACKEND] Server running seamlessly on port ${PORT}`);
 });
