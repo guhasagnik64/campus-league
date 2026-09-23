@@ -1486,6 +1486,9 @@ app.get(
     }
   }
 );
+app.get('/', (req, res) => {
+  res.json({ status: 'success', message: 'Campus League Backend is running smoothly!' });
+});
 
 // ========================================================================
 // 🚀 SERVER LISTENING START
