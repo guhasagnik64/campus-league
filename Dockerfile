@@ -1,4 +1,4 @@
-FROM node:18-slim
+FROM node:20-slim
 
 # Install Python & system dependencies for OpenCV / FFmpeg
 RUN apt-get update && apt-get install -y \
