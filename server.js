@@ -1487,11 +1487,6 @@ app.get(
   }
 );
 
-// Optional root status endpoint
-app.get('/', (req, res) => {
-  res.json({ status: 'success', message: 'Campus League Backend is running smoothly!' });
-});
-
 // ========================================================================
 // STATIC FRONTEND BUILD ROUTING FOR RENDER DEPLOYMENT
 // ========================================================================
