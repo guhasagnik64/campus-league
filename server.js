@@ -11,7 +11,10 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const admin = require('firebase-admin');
+let admin = require('firebase-admin');
+if (admin && admin.default) {
+  admin = admin.default;
+}
 
 // Firebase Admin SDK Setup
 if (!admin.apps.length) {
