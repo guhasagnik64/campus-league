@@ -8,10 +8,12 @@ import path from 'path';
 import multer from 'multer';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const admin = require('firebase-admin');
 
 // Firebase Admin SDK Setup
-import * as admin from 'firebase-admin';
-
 if (!admin.apps.length) {
   if (process.env.FIREBASE_CREDENTIALS) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
