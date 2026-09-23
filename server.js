@@ -1472,7 +1472,7 @@ app.post(
 app.get(
   '/api/coach/portfolio-proofs',
   async (req, res) => {
-    const coachId = req.query.coach_id;
+    const { coachId } = req.query;
     try {
       let query = firestoreDb.collection('coach_portfolio_proofs');
       if (coachId) {
@@ -1486,15 +1486,27 @@ app.get(
     }
   }
 );
+
+// Optional root status endpoint
 app.get('/', (req, res) => {
   res.json({ status: 'success', message: 'Campus League Backend is running smoothly!' });
 });
 
 // ========================================================================
-// 🚀 SERVER LISTENING START
+// STATIC FRONTEND BUILD ROUTING FOR RENDER DEPLOYMENT
+// ========================================================================
+
+app.use(express.static(path.join(__dirname, 'dist')));
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+// ========================================================================
+// SERVER LISTENING START
 // ========================================================================
 
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
-  console.log(`🚀 [CAMPUS LEAGUE BACKEND] Server running seamlessly on port ${PORT}`);
+  console.log(`[CAMPUS LEAGUE BACKEND] Server running seamlessly on port ${PORT}`);
 });
