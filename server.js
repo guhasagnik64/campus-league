@@ -10,7 +10,7 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 
 // Firebase Admin SDK Setup
-import admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 
 if (!admin.apps.length) {
   if (process.env.FIREBASE_CREDENTIALS) {
@@ -33,7 +33,6 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
-
 // Resolve directory configurations for ES Modules syntax stability
 const TELEGRAM_BOT_TOKEN = "8794328547:AAHD-N7tZICeyLO0hNeB8CC7wlP5GNGXVEY";
 const STORAGE_CHAT_ID = "-1004377897036";
