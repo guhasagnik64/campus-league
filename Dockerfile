@@ -22,6 +22,9 @@ RUN pip3 install --no-cache-dir -r requirements.txt || true
 # Copy source code
 COPY . .
 
-EXPOSE 5000
+# Build the Vite frontend static bundle into the 'dist' folder
+RUN npm run build
+
+EXPOSE 10000
 
 CMD ["node", "server.js"]
