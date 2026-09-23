@@ -25,7 +25,7 @@ import {
 
 // Safely import external child components with graceful fallbacks
 import DashboardUploader from './components/DashboardUploader';
-import DailyPlayerCheckIn from './components/DailyPlayerCheckin';
+import DailyPlayerCheckIn from './components/DailyPlayerCheckIn';
 import PlayerSportsCV from './components/PlayerSportsCV';
 import CoachPortfolioCV from './components/CoachPortfolioCV';
 import DailyReport from './components/DailyReport';
