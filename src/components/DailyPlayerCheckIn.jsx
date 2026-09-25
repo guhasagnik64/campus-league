@@ -39,6 +39,9 @@ export default function DailyPlayerCheckIn({ currentUser }) {
   const [checkInStatus, setCheckInStatus] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Dynamic Squads State
+  const [squads, setSquads] = useState(['Group A', 'Group B']);
+
   // Photo & Webcam State
   const [capturedImage, setCapturedImage] = useState(null);
   const [isWebcamActive, setIsWebcamActive] = useState(false);
@@ -56,9 +59,7 @@ export default function DailyPlayerCheckIn({ currentUser }) {
       setLoadingReports(true);
       setError('');
       try {
-        // FIXED: Replaced corrupted escaped string interpolation with valid template literal
-        // ✅ Correct:
-       const response = await fetch(`\({API_BASE_URL}/api/player-room/\){encodeURIComponent(playerId)}`);
+        const response = await fetch(`\({API_BASE_URL}/api/player-room/\){encodeURIComponent(playerId)}`);
         if (response.ok) {
           const data = await response.json();
           setReports(data.reports || []);
@@ -75,6 +76,27 @@ export default function DailyPlayerCheckIn({ currentUser }) {
 
     if (playerId) fetchTelemetryReports();
   }, [playerId]);
+
+  // 1.5 Fetch dynamic active squads from backend on mount
+  useEffect(() => {
+    const fetchSquads = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/squads`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.squads && data.squads.length > 0) {
+            setSquads(data.squads);
+            if (!data.squads.includes(sessionGroup)) {
+              setSessionGroup(data.squads[0]);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load dynamic squads, using defaults:', err);
+      }
+    };
+    fetchSquads();
+  }, []);
 
   // Clean up media stream on unmount
   useEffect(() => {
@@ -160,7 +182,7 @@ export default function DailyPlayerCheckIn({ currentUser }) {
 
       const response = await fetch(`${API_BASE_URL}/api/players/register`, {
         method: 'POST',
-        body: formData // Content-Type header auto-set for multipart
+        body: formData
       });
 
       const data = await response.json();
@@ -197,8 +219,9 @@ export default function DailyPlayerCheckIn({ currentUser }) {
     React.createElement('form', { onSubmit: handleCheckInSubmit, style: { marginTop: '1rem' } },
       React.createElement('label', null, 'Assigned Squad: '),
       React.createElement('select', { value: sessionGroup, onChange: (e) => setSessionGroup(e.target.value) },
-        React.createElement('option', { value: 'Group A' }, 'Group A'),
-        React.createElement('option', { value: 'Group B' }, 'Group B')
+        squads.map((squad) => 
+          React.createElement('option', { key: squad, value: squad }, squad)
+        )
       ),
       React.createElement('br'),
       React.createElement('button', { type: 'submit', disabled: isSubmitting, style: { marginTop: '10px' } },
