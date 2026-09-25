@@ -1354,6 +1354,41 @@ app.post(
 );
 
 // ========================================================================
+// 🛡️ DYNAMIC SQUADS CONFIGURATION ENDPOINT
+// ========================================================================
+
+app.get('/api/squads', async (req, res) => {
+  try {
+    const snapshot = await firestoreDb.collection('squads').get();
+    let squads = snapshot.docs.map(doc => doc.data().name || doc.id);
+
+    if (squads.length === 0) {
+      const leaderSnapshot = await firestoreDb.collection('leaderboard').get();
+      const groupSet = new Set();
+      leaderSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.group_id) groupSet.add(data.group_id);
+      });
+      squads = Array.from(groupSet);
+    }
+
+    if (squads.length === 0) {
+      squads = ["Group A", "Group B", "Group C", "Group D"];
+    }
+
+    res.json({
+      success: true,
+      squads: squads
+    });
+  } catch (err) {
+    console.error('Error fetching dynamic squads:', err);
+    res.json({
+      success: true,
+      squads: ["Group A", "Group B", "Group C", "Group D"]
+    });
+  }
+});
+// ========================================================================
 // 📊 UPLOAD VIDEO, DYNAMIC RETENTION & COACH PORTFOLIO PIPELINE
 // ========================================================================
 
