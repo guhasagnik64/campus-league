@@ -45,27 +45,7 @@ def fetch_firestore_drill_rules(drill_document_id='inside_outside_touch_moving')
         print(f"[FIRESTORE ERROR] Could not fetch drill rules for '{drill_document_id}': {e}", flush=True)
     return None
 
-if not rules_dict:
-        return 75  # Default baseline OVR
 
-    foot_pattern_rules = rules_dict.get('rules_sequence', [{}])[0].get('foot_pattern', [])
-    weights = rules_dict.get('scoring_weights', {'sequence_accuracy': 0.5, 'completion_time': 0.3, 'ball_control_radius': 0.2})
-
-    # Dummy metric extractors (Replace/connect with your MediaPipe Pose & Ball tracking variables)
-    # detected_sequence = detect_foot_touches(player_pose_keypoints, ball_coords)
-    # sequence_accuracy = calculate_sequence_match(detected_sequence, foot_pattern_rules)
-    sequence_accuracy = 0.85  # Placeholder high accuracy match
-    control_radius = 0.4  # Meters distance ball to foot
-    completion_time = 4.2  # Seconds duration
-
-    # Weighted Overall Rating Calculation
-    ovr_score = int(
-        (sequence_accuracy * weights.get('sequence_accuracy', 0.5) * 100) +
-        ((1 / max(completion_time, 0.1)) * weights.get('completion_time', 0.3) * 500) +
-        ((1 / max(control_radius, 0.1)) * weights.get('ball_control_radius', 0.2) * 10)
-    )
-
-    return min(ovr_score, 99)  # Cap score at 99 OVR
 # Custom Drill Analytics Module Integration
 try:
     from drill_analytics import run_drill_analysis, analyze_universal_drill
