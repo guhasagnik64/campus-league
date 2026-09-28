@@ -346,24 +346,22 @@ try:
                                 gray_head = cv2.cvtColor(player_head, cv2.COLOR_BGR2GRAY)
                                 faces = face_cascade.detectMultiScale(gray_head, 1.1, 2)
                                 if len(faces) > 0 and len(known_metadata) > 0:
-            matched_index = track_id % len(known_metadata)
-            detected_real_name = list(known_metadata.keys())[matched_index]
-            track_to_real_name_map[assigned_id] = detected_real_name
-        elif player_tags and len(player_tags) > 0:
-            matched_tag = player_tags[(track_id - 1) % len(player_tags)]
-            track_to_real_name_map[assigned_id] = matched_tag
-        else:
-            track_to_real_name_map[assigned_id] = f"Player_{track_id}"   # <-- Updated here
-    elif player_tags and len(player_tags) > 0:
-        matched_tag = player_tags[(track_id - 1) % len(player_tags)]
-        track_to_real_name_map[assigned_id] = matched_tag
-    else:
-        track_to_real_name_map[assigned_id] = f"Player_{track_id}"       # <-- Updated here
+                                    matched_index = track_id % len(known_metadata)
+                                    detected_real_name = list(known_metadata.keys())[matched_index]
+                                    track_to_real_name_map[assigned_id] = detected_real_name
+                                elif player_tags and len(player_tags) > 0:
+                                    matched_tag = player_tags[(track_id - 1) % len(player_tags)]
+                                    track_to_real_name_map[assigned_id] = matched_tag
+                                else:
+                                    track_to_real_name_map[assigned_id] = f"Player_{track_id}"
+                            elif player_tags and len(player_tags) > 0:
+                                matched_tag = player_tags[(track_id - 1) % len(player_tags)]
+                                track_to_real_name_map[assigned_id] = matched_tag
+                            else:
+                                track_to_real_name_map[assigned_id] = f"Player_{track_id}"
                         except Exception:
                             track_to_real_name_map[assigned_id] = target_player_name if target_player_name != "Anonymous Player" else assigned_id
-
                     identity_marker = track_to_real_name_map.get(assigned_id, assigned_id)
-
                     # Pixel Displacement & Speed Calculation
                     displacement = 0.0
                     if assigned_id in tracked_entities:
