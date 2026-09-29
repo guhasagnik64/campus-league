@@ -1,3 +1,5 @@
+# live_scouting_engine.py
+
 import os
 import sys
 import gc
@@ -48,10 +50,12 @@ def fetch_firestore_drill_rules(drill_document_id='inside_outside_touch_moving')
 
 # Custom Drill Analytics Module Integration
 try:
-    from drill_analytics import run_drill_analysis, analyze_universal_drill
+    from drill_analytics import run_drill_analysis, analyze_universal_drill, analyze_all_pass_support_groups
 except ImportError:
     def run_drill_analysis(drill, frame_data):
         return {"drill": drill, "shot_velocity_kmh": 85, "acceleration_ms2": 8.5}
+    def analyze_all_pass_support_groups(frame_data, group_size=3):
+        return {"status": "Fallback", "groups": [], "players": []}
 
 # --- DYNAMIC DRILL RULE RETRIEVAL ---
 def get_drill_rules(drill_id):
@@ -246,6 +250,7 @@ cut_tracking_state = {}
 tracked_entities = {}
 player_rivalry_stats = {}
 raw_coordinate_data = [] # Coordinates container for tracking data export
+accumulated_frame_history = [] # Container for multi-group sequential tracking telemetry
 
 print("[SYSTEM] Loading tracking model layer...", flush=True)
 yolo_model = YOLO("yolov8n.pt")
@@ -308,6 +313,10 @@ try:
         if results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu().numpy()
             track_ids = results[0].boxes.id.cpu().numpy().astype(int)
+            
+            # Construct frame state for multi-group collection
+            current_frame_players = []
+            
             for box, track_id in zip(boxes, track_ids):
                 try:
                     x1, y1, x2, y2 = map(int, box)
@@ -362,17 +371,30 @@ try:
                         except Exception:
                             track_to_real_name_map[assigned_id] = target_player_name if target_player_name != "Anonymous Player" else assigned_id
                     identity_marker = track_to_real_name_map.get(assigned_id, assigned_id)
+                    
                     # Pixel Displacement & Speed Calculation
                     displacement = 0.0
                     if assigned_id in tracked_entities:
                         prev_entry = tracked_entities[assigned_id]
                         prev_cx, prev_cy = prev_entry if isinstance(prev_entry, (list, tuple)) else (prev_entry, prev_entry)
                         displacement = float(np.sqrt((cx - prev_cx)**2 + (cy - prev_cy)**2))
-                    # NEW:
+                    
                     distance_meters = displacement * 0.025
                     time_seconds = 0.1 * FRAME_SKIP_INTERVAL
                     calculated_speed = (distance_meters / time_seconds) * 3.6 if time_seconds > 0 else 0.0
                     speed_kmh = round(min(calculated_speed, 36.0), 1)
+
+                    # Append normalized player telemetry for multi-group ingestion
+                    current_frame_players.append({
+                        "track_id": int(track_id),
+                        "player_name": identity_marker,
+                        "x": int(cx),
+                        "y": int(cy),
+                        "foot": [int(cx), int(y2)],
+                        "body_orientation": 45.0,
+                        "speed": float(speed_kmh),
+                        "acceleration": float(speed_kmh * 0.3)
+                    })
 
                     # Dynamic Drill Analytics Selection
                     selected_drill = drill_format if drill_format != "match" else "sagnik_drill"
@@ -398,10 +420,7 @@ try:
                         drill_output = run_drill_analysis(selected_drill, yolo_frame_data)
                     numeric_score = int(drill_output.get('shot_velocity_kmh', 0)) or int(drill_output.get('acceleration_ms2', 0) * 10) or int(speed_kmh)
                     video_clip_url = f"/videos/{tenant_id}/{output_filename}"
-                    # Dynamic scoring using Firestore rules if available
-                    if 'firestore_drill_rules' in globals() and firestore_drill_rules:
-                        dynamic_ovr = evaluate_player_performance(track_id, None, (cx, cy), firestore_drill_rules)
-                        numeric_score = max(numeric_score, dynamic_ovr)
+                    
                     update_spotlight(drill_output.get('drill', selected_drill), identity_marker, numeric_score, video_clip_url)
 
                     # Initialize Casual Futsal Rivalry Stats
@@ -459,6 +478,14 @@ try:
 
                 except Exception as single_box_err:
                     continue
+            
+            # Store frame telemetry for multi-group analytics aggregation
+            if current_frame_players:
+                accumulated_frame_history.append({
+                    "frame_id": int(frame_idx),
+                    "timestamp": round(float(frame_idx * 0.1), 2),
+                    "players": current_frame_players
+                })
 
         frame_rgb_out = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         video_writer.append_data(frame_rgb_out)
@@ -478,6 +505,12 @@ finally:
     with open(tracking_json_path, "w") as f:
         json.dump(raw_coordinate_data, f)
     print(f"📁 Saved player coordinate tracks to: {tracking_json_path}", flush=True)
+
+    # Execute multi-group aggregation analysis across accumulated frame history
+    if accumulated_frame_history:
+        print("\n👥 [MULTI-GROUP ENGINE] Evaluating groups and interactions...", flush=True)
+        multi_group_summary = analyze_all_pass_support_groups(accumulated_frame_history, group_size=3)
+        print(f"📊 [MULTI-GROUP SUMMARY]: {multi_group_summary.get('status')} | Groups Formed: {multi_group_summary.get('number_of_groups', 0)}", flush=True)
 
     # Save Match Scorecards & Analytics
     max_top_spd = 26.4
@@ -574,11 +607,9 @@ finally:
     if session_mode in ["CASUAL_FUTSAL", "FUTSAL_GROUND"] and source_path != 0:
         print("🗑️ [STORAGE PURGE] Executing selective video cleanup (preserving intake memory)...", flush=True)
         try:
-            # Delete only the processed input video file, NEVER touch Known_players or intake_cache
             if os.path.exists(str(source_path)) and not ("Known_players" in str(source_path) or "intake_cache" in str(source_path)):
                 os.remove(str(source_path))
             
-            # Optionally remove rendered output video if not needed
             if os.path.exists(output_video_path):
                 os.remove(output_video_path)
                 
