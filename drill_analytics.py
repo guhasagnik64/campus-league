@@ -6,6 +6,9 @@ import json
 import numpy as np
 
 from datetime import date, datetime, timedelta, timezone
+from itertools import combinations
+from collections import defaultdict
+import math
 
 # Firebase Admin SDK
 import firebase_admin
@@ -1013,4 +1016,233 @@ def analyze_dribble_and_pass(
         "player_id": player_id,
         "drill": "Dribble and Pass",
         "completion_time": completion_time
+    }
+
+
+# =====================================================================
+# MULTI-GROUP & MULTI-PLAYER DYNAMIC PIPELINE EXTENSION
+# =====================================================================
+
+def _distance_xy(a, b):
+    if not a or not b:
+        return None
+    try:
+        return float(
+            math.sqrt(
+                (float(a[0]) - float(b[0])) ** 2 +
+                (float(a[1]) - float(b[1])) ** 2
+            )
+        )
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def build_player_history(frame_data):
+    history = defaultdict(list)
+    if not isinstance(frame_data, list):
+        return history
+
+    for frame in frame_data:
+        if not isinstance(frame, dict):
+            continue
+
+        timestamp = float(frame.get("timestamp", 0.0))
+        players = frame.get("players", [])
+        if not isinstance(players, list):
+            continue
+
+        for player in players:
+            if not isinstance(player, dict):
+                continue
+            track_id = player.get("track_id")
+            if track_id is None:
+                continue
+
+            position = player.get("foot") or player.get("position") or [player.get("x", 0), player.get("y", 0)]
+            if position is None:
+                continue
+
+            history[str(track_id)].append({
+                "timestamp": timestamp,
+                "position": position,
+                "speed": player.get("speed"),
+                "acceleration": player.get("acceleration"),
+                "body_orientation": player.get("body_orientation")
+            })
+
+    return history
+
+
+def calculate_player_interaction_score(player_a_history, player_b_history, max_group_distance=450.0):
+    if not player_a_history or not player_b_history:
+        return 0.0
+
+    distances = []
+    length = min(len(player_a_history), len(player_b_history))
+
+    for index in range(length):
+        a = player_a_history[index]["position"]
+        b = player_b_history[index]["position"]
+        distance = _distance_xy(a, b)
+        if distance is not None:
+            distances.append(distance)
+
+    if not distances:
+        return 0.0
+
+    close_frames = sum(1 for distance in distances if distance <= max_group_distance)
+    proximity_score = (close_frames / len(distances)) * 100.0
+    return round(max(0.0, min(100.0, proximity_score)), 2)
+
+
+def generate_candidate_groups(player_history, group_size=3, max_group_distance=450.0):
+    player_ids = list(player_history.keys())
+    candidates = []
+
+    for combination in combinations(player_ids, group_size):
+        a, b, c = combination
+        ab = calculate_player_interaction_score(player_history[a], player_history[b], max_group_distance)
+        ac = calculate_player_interaction_score(player_history[a], player_history[c], max_group_distance)
+        bc = calculate_player_interaction_score(player_history[b], player_history[c], max_group_distance)
+        group_score = (ab + ac + bc) / 3.0
+
+        candidates.append({
+            "players": list(combination),
+            "group_score": round(group_score, 2)
+        })
+
+    candidates.sort(key=lambda item: item["group_score"], reverse=True)
+    return candidates
+
+
+def assign_stable_groups(player_history, group_size=3, max_group_distance=450.0, minimum_group_score=35.0):
+    candidates = generate_candidate_groups(player_history, group_size=group_size, max_group_distance=max_group_distance)
+    assigned_players = set()
+    groups = []
+    group_number = 1
+
+    for candidate in candidates:
+        players = candidate["players"]
+        if candidate["group_score"] < minimum_group_score:
+            continue
+        if any(player_id in assigned_players for player_id in players):
+            continue
+
+        groups.append({
+            "group_id": f"Group_{group_number:03d}",
+            "players": players,
+            "group_score": candidate["group_score"]
+        })
+        assigned_players.update(players)
+        group_number += 1
+
+    return groups
+
+
+def analyze_pass_support_group(group_id, player_ids, frame_data):
+    if len(player_ids) != 3:
+        return {"group_id": group_id, "status": "Invalid group size", "players": []}
+
+    player_metrics = {str(pid): {"passes_attempted": 0, "passes_completed": 0, "receptions": 0, "speed_values": [], "acceleration_values": [], "reception_orientation": []} for pid in player_ids}
+    group_events = []
+
+    for frame in frame_data:
+        if not isinstance(frame, dict):
+            continue
+        players = frame.get("players", [])
+        player_lookup = {}
+        for player in players:
+            track_id = player.get("track_id")
+            if track_id is not None and str(track_id) in player_ids:
+                player_lookup[str(track_id)] = player
+
+        if len(player_lookup) != 3:
+            continue
+
+        for player_id, player in player_lookup.items():
+            metrics = player_metrics[player_id]
+            if player.get("speed") is not None:
+                metrics["speed_values"].append(float(player["speed"]))
+            if player.get("acceleration") is not None:
+                metrics["acceleration_values"].append(float(player["acceleration"]))
+            if player.get("body_orientation") is not None:
+                metrics["reception_orientation"].append(float(player["body_orientation"]))
+
+        pass_event = frame.get("pass_event")
+        if pass_event:
+            passer_id = str(pass_event.get("passer_id"))
+            receiver_id = str(pass_event.get("receiver_id"))
+            if passer_id in player_metrics and receiver_id in player_metrics:
+                player_metrics[passer_id]["passes_attempted"] += 1
+                if pass_event.get("completed", False):
+                    player_metrics[passer_id]["passes_completed"] += 1
+                    player_metrics[receiver_id]["receptions"] += 1
+                group_events.append({"type": "pass", "timestamp": frame.get("timestamp"), "passer_id": passer_id, "receiver_id": receiver_id, "completed": bool(pass_event.get("completed", False))})
+
+    individual_results = []
+    for player_id in player_ids:
+        metrics = player_metrics[str(player_id)]
+        attempts = metrics["passes_attempted"]
+        completed = metrics["passes_completed"]
+        passing_accuracy = (completed / attempts * 100.0) if attempts > 0 else 75.0
+        reception_orientation = sum(metrics["reception_orientation"]) / len(metrics["reception_orientation"]) if metrics["reception_orientation"] else 80.0
+        peak_acceleration = max(metrics["acceleration_values"]) if metrics["acceleration_values"] else 2.5
+        sprint_acceleration_rate = min(100.0, max(0.0, (peak_acceleration / 3.5) * 100.0))
+
+        individual_score = int(round((passing_accuracy * 0.40) + (reception_orientation * 0.30) + (sprint_acceleration_rate * 0.30)))
+        individual_results.append({
+            "player_id": str(player_id),
+            "groupId": str(group_id),
+            "drill": "3-Player Pass & Support",
+            "passing_accuracy": round(passing_accuracy, 2),
+            "reception_orientation": round(reception_orientation, 2),
+            "sprint_acceleration_rate": round(sprint_acceleration_rate, 2),
+            "score": max(0, min(100, individual_score))
+        })
+
+    group_score = round(sum(p["score"] for p in individual_results) / len(individual_results)) if individual_results else 0
+    return {
+        "group_id": group_id,
+        "group_size": 3,
+        "players": individual_results,
+        "group_score": group_score,
+        "events": group_events,
+        "total_passes": len(group_events),
+        "status": "Completed"
+    }
+
+
+def analyze_all_pass_support_groups(frame_data, group_size=3):
+    if not isinstance(frame_data, list):
+        return {"status": "Invalid frame data", "groups": [], "players": []}
+
+    player_history = build_player_history(frame_data)
+    if not player_history:
+        return {"status": "No tracked players detected", "groups": [], "players": []}
+
+    groups = assign_stable_groups(player_history, group_size=group_size)
+    if not groups:
+        return {"status": "No valid groups detected", "groups": [], "players": []}
+
+    group_results = []
+    all_players = []
+
+    for group in groups:
+        group_result = analyze_pass_support_group(group["group_id"], group["players"], frame_data)
+        group_results.append(group_result)
+        all_players.extend(group_result.get("players", []))
+
+    leaderboard = sorted(all_players, key=lambda p: p.get("score", 0), reverse=True)
+    for rank, player in enumerate(leaderboard, start=1):
+        player["global_rank"] = rank
+
+    session_score = round(sum(p["score"] for p in leaderboard) / len(leaderboard)) if leaderboard else 0
+    return {
+        "status": "Completed",
+        "drill": "3-Player Pass & Support",
+        "group_size": 3,
+        "number_of_groups": len(group_results),
+        "session_score": session_score,
+        "groups": group_results,
+        "players": leaderboard
     }
