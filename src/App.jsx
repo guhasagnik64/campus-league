@@ -9,6 +9,7 @@ const socket = io('http://127.0.0.1:8000', {
 });
 
 import { db } from './firebase';
+import { AVAILABLE_DRILLS } from './utils/drills';
 
 import {
   collection,
@@ -480,27 +481,7 @@ const [groupRoster, setGroupRoster] = useState([
     setActivePlayerData(player);
   };
 
-  const AVAILABLE_DRILLS = [
-    { id: 'outside_cut', name: '🎯 Coach Tamal: Outside Cut & Vision', label: '🎯 Coach Sagnik: Outside Cut & Vision' },
-    { id: 'cone_dribble', name: '✨ Clean Cone Dribble & Posture', label: '✨ Clean Cone Dribble & Posture' },
-    { id: 'left_foot_slalom', name: '🦶 Left Foot Outside Cut Slalom', label: '🦶 Left Foot Outside Cut Slalom' },
-    { id: 'weak_foot', name: '💪 Weak Foot Proficiency', label: '💪 Weak Foot Proficiency' },
-    { id: 'left_right_combo', name: '🔄 Left-Right Foot Combination', label: '🔄 Left-Right Foot Combination' },
-    { id: 'dribble_pass', name: '⚽ Dribbling & Pass Drill', label: '⚽ Dribbling & Pass Drill' },
-    { id: 'dribbling', name: '⚽ Dribbling & Close Control', label: '⚽ Dribbling & Close Control' },
-    { id: 'pass_support', name: '📐 3-Player Pass & Support Rotation', label: '📐 3-Player Pass & Support Rotation' },
-    { id: '3_players_drill_1', name: '🔄 3-Player Side-Swap Drill', label: '🔄 3-Player Side-Swap Drill' },
-    { id: 'give_and_go', name: '⚡ Give & Go (Pass & Move)', label: '⚡ Give & Go (Pass & Move)' },
-    { id: 'saq', name: '🏃 SAQ (Speed, Agility, Quickness)', label: '🏃 SAQ (Speed, Agility, Quickness)' },
-    { id: 'line_breaker', name: '🗡️ Penetration Line-Breaker Pass', label: '🗡️ Penetration Line-Breaker Pass' },
-    { id: 'overlapping_run', name: '🔄 Overlapping Run', label: '🔄 Overlapping Run' },
-    { id: 'ssg_attacking', name: '⚔️ 1v1 / SSG Attacking', label: '⚔️ 1v1 / SSG Attacking' },
-    { id: 'ssg_defending', name: '🛡️ 1v1 / SSG Defending', label: '🛡️ 1v1 / SSG Defending' },
-    { id: 'takeover', name: '🥊 Take Over Crossover', label: '🥊 Take Over Crossover' },
-    { id: 'shooting', name: '🎯 Shooting Precision', label: '🎯 Shooting Precision' },
-    { id: 'relay_dribble_pass', name: '🔄 Relay Dribble & Open-Body Pass', label: '🔄 Relay Dribble & Open-Body Pass' }
-  ];
-
+  
   const [selectedDrill, setSelectedDrill] = useState('outside_cut');
   const [drillAnalyticsData, setDrillAnalyticsData] = useState(null);
 
