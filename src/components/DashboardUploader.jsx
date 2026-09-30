@@ -118,7 +118,7 @@ export default function DashboardUploader({ currentUser, setDrillStats }) {
       setIsAnalyzing(true);
       setStatus(`⏳ Analyzing session video & photo reference for ${videoFile.name}...`);
 
-      const response = await axios.post("http://localhost:8002/api/upload-analysis", formData, {
+      const response = await axios.post("http://localhost:8000/api/upload-analysis", formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       const data = response.data;
@@ -133,33 +133,39 @@ export default function DashboardUploader({ currentUser, setDrillStats }) {
 
       if (data) {
         try {
-          await addDoc(collection(db, "leaderboards"), {
-            ...data,
-            player_name: playerName,
-            player_id: playerId,
-            player_tags: activeTags,
-            execution_mode: executionMode,
-            drill_type: drillType,
-            has_photo_reference: !!playerPhotoFile,
-            createdAt: serverTimestamp()
+          // Publish individual leaderboard records for ALL tagged players in the drill
+          const savePromises = activeTags.map((pName) => {
+            const pId = pName === playerName ? playerId : `PLR-${pName.toLowerCase().replace(/\s+/g, '_')}`;
+            
+            return addDoc(collection(db, "leaderboards"), {
+              ...data,
+              player_name: pName,
+              player_id: pId,
+              player_tags: activeTags,
+              execution_mode: executionMode,
+              drill_type: drillType,
+              has_photo_reference: !!playerPhotoFile,
+              createdAt: serverTimestamp()
+            });
           });
-          setStatus(`✅ Analysis complete! Video and photo reference processed.`);
+
+          await Promise.all(savePromises);
+          setStatus(`✅ Analysis complete! Published leaderboard entries for: ${activeTags.join(', ')}.`);
         } catch (firebaseErr) {
           console.error("Firebase save error:", firebaseErr);
-          setStatus(`🔄 Analysis finished, but failed to save to database.`);
+          setStatus(`🔄 Analysis finished, but failed to save player entries to database.`);
         }
       }
 
-      alert(`Video and player photo analysis complete for ${videoFile.name}!`);
+      alert(`Video analysis complete! ${activeTags.length} player leaderboard rankings updated.`);
     } catch (error) {
       console.error("Analysis Error:", error);
-      setStatus('❌ Upload failed. Ensure Express/Python backend (port 8000) is running!');
-      alert("Upload failed. Ensure backend (port 8000) is running!");
+      setStatus('❌ Upload failed. Ensure Express/Python backend is running!');
+      alert("Upload failed. Ensure backend is running!");
     } finally {
       setIsAnalyzing(false);
     }
   };
-
   return (
     <div style={{
       background: '#0f172a',
