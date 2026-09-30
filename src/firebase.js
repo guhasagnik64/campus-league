@@ -17,7 +17,7 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with long-polling to prevent stream network drops
 export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
+  experimentalAutoDetectLongPolling: true,
 });
 
 // Storage Export
