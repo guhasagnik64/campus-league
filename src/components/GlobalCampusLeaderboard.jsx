@@ -49,16 +49,21 @@ export default function GlobalCampusLeaderboard({
     targetPlayerId,
     playerData
   ) => {
-    const activePlayerId =
-      localStorage.getItem("activePlayerId");
+    const activePlayerId = localStorage.getItem("activePlayerId");
+    
+    // Check multiple potential localStorage key/casing conventions
+    const rawRole = 
+      localStorage.getItem("userRole") || 
+      localStorage.getItem("role") || 
+      "";
+    
+    const userRole = rawRole.toLowerCase().trim();
 
-    const userRole =
-      localStorage.getItem("userRole");
-
+    // Grant access to Admins, Coaches, or the athlete viewing their own profile
     const canAccess =
       userRole === "admin" ||
       userRole === "coach" ||
-      activePlayerId === String(targetPlayerId);
+      String(activePlayerId) === String(targetPlayerId);
 
     if (!canAccess) {
       alert(
@@ -73,7 +78,6 @@ export default function GlobalCampusLeaderboard({
 
     navigate(`/portfolio/${targetPlayerId}`);
   };
-
   // ------------------------------------------------------------
   // NORMALIZE LEADERBOARD PAYLOAD
   // ------------------------------------------------------------
