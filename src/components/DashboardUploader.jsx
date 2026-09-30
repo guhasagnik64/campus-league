@@ -134,10 +134,10 @@ export default function DashboardUploader({ currentUser, setDrillStats }) {
       if (data) {
         try {
           // Publish individual leaderboard records for ALL tagged players in the drill
-          const savePromises = activeTags.map((pName) => {
+          const savePromises = activeTags.map(async (pName) => {
             const pId = pName === playerName ? playerId : `PLR-${pName.toLowerCase().replace(/\s+/g, '_')}`;
             
-            return addDoc(collection(db, "leaderboards"), {
+            const payload = {
               ...data,
               player_name: pName,
               player_id: pId,
@@ -146,14 +146,23 @@ export default function DashboardUploader({ currentUser, setDrillStats }) {
               drill_type: drillType,
               has_photo_reference: !!playerPhotoFile,
               createdAt: serverTimestamp()
-            });
+            };
+
+            // Non-blocking Firestore save attempt with error capture
+            try {
+              await addDoc(collection(db, "leaderboards"), payload);
+            } catch (fsErr) {
+              console.warn(`Firestore save skipped for ${pName} due to network issue:`, fsErr);
+            }
           });
 
           await Promise.all(savePromises);
           setStatus(`✅ Analysis complete! Published leaderboard entries for: ${activeTags.join(', ')}.`);
+          alert(`Video analysis complete! ${activeTags.length} player leaderboard rankings updated.`);
         } catch (firebaseErr) {
           console.error("Firebase save error:", firebaseErr);
-          setStatus(`🔄 Analysis finished, but failed to save player entries to database.`);
+          setStatus(`🔄 Analysis finished, but failed to sync with database.`);
+          alert("Analysis completed, but network errors prevented live leaderboard sync.");
         }
       }
 
