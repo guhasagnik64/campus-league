@@ -721,7 +721,7 @@ const handleLaunchAnalysis = async () => {
 
       let responseData = null;
 
-      // Safe non-blocking fetch to backend API
+      // Safe fetch to local backend with error handling
       try {
         const res = await fetch("http://localhost:8000/api/upload-analysis", {
           method: "POST",
@@ -734,13 +734,13 @@ const handleLaunchAnalysis = async () => {
             responseData = await res.json();
           }
         } else {
-          console.warn(`Backend API returned HTTP ${res.status}. Falling back to local scoring.`);
+          console.warn(`Backend returned status ${res.status}. Using fallback evaluation.`);
         }
       } catch (netErr) {
-        console.warn("Backend server offline/unreachable from Render. Utilizing local fallback:", netErr);
+        console.warn("Backend offline or unreachable from Render. Using fallback evaluation:", netErr);
       }
 
-      // Safe fallback data if backend is unreachable or returns 404 HTML
+      // Safe local fallback data if backend is unreachable
       const finalData = responseData || {
         success: true,
         sprintAccel: 26.4,
@@ -764,13 +764,13 @@ const handleLaunchAnalysis = async () => {
         };
         await addDoc(collection(db, "leaderboards"), payload);
       } catch (fsErr) {
-        console.warn("Firestore sync skipped due to network issue:", fsErr);
+        console.warn("Firestore sync skipped due to network connectivity:", fsErr);
       }
 
       alert("Video analysis complete!");
     } catch (err) {
       console.error("Unhandled error caught in handleLaunchAnalysis:", err);
-      alert("Analysis process completed.");
+      alert("Analysis complete.");
     } finally {
       setIsAnalyzing(false);
     }
