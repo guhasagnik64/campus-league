@@ -50,19 +50,32 @@ export default function GlobalCampusLeaderboard({
     playerData
   ) => {
     const activePlayerId = localStorage.getItem("activePlayerId");
-    
-    // Check multiple potential localStorage key/casing conventions
-    const rawRole = 
-      localStorage.getItem("userRole") || 
-      localStorage.getItem("role") || 
-      "";
-    
-    const userRole = rawRole.toLowerCase().trim();
 
-    // Grant access to Admins, Coaches, or the athlete viewing their own profile
+    // Parse the logged-in user object from localStorage
+    let userRole = "";
+    try {
+      const storedUser = localStorage.getItem("jsports_user");
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        userRole = (parsedUser.role || parsedUser.userRole || "").toLowerCase().trim();
+      }
+    } catch (e) {
+      console.error("Error parsing user role:", e);
+    }
+
+    // Direct fallback checks
+    if (!userRole) {
+      const rawRole = localStorage.getItem("userRole") || localStorage.getItem("role") || "";
+      userRole = rawRole.toLowerCase().trim();
+    }
+
+    // Check if user is admin/coach OR if current admin ID starts with 'admin_'
+    const isExplicitAdmin = userRole === "admin" || userRole === "coach";
+    const isAdminUser = localStorage.getItem("jsports_user")?.includes('"admin_') || false;
+
     const canAccess =
-      userRole === "admin" ||
-      userRole === "coach" ||
+      isExplicitAdmin ||
+      isAdminUser ||
       String(activePlayerId) === String(targetPlayerId);
 
     if (!canAccess) {
