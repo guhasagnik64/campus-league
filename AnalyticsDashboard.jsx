@@ -11,9 +11,21 @@ export const GroupReportView = () => {
 
   useEffect(() => {
     fetch('http://localhost:8000/api/admin/group_report')
-      .then((res) => res.json())
-      .then((data) => setReports(data.players || {}))
-      .catch((err) => console.error('Error fetching admin group report:', err));
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP status ${res.status}`);
+        }
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          return res.json();
+        }
+        throw new Error("Response was not JSON");
+      })
+      .then((data) => setReports(data?.players || {}))
+      .catch((err) => {
+        console.warn('Error/404 fetching admin group report, using fallback:', err);
+        setReports({});
+      });
   }, []);
 
   return (
