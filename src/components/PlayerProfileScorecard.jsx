@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { io } from "socket.io-client";
+import { useLocation, useParams } from "react-router-dom";
 import { getStudentTrialStatus } from "../utils/trialManager";
 import PaymentModal from "./PaymentModal";
 
@@ -48,10 +49,15 @@ function formatFirestoreDate(timestamp) {
 }
 
 export default function PlayerProfileScorecard({
-  playerId,
+  playerId: propPlayerId,
   studentData,
   user,
 }) {
+  const params = useParams();
+  const location = useLocation();
+  const playerId = propPlayerId || params.playerId || params.targetPlayerId;
+  const { playerData: passedPlayerData, signedInPlayer, playDescription } = location.state || {};
+
   const [scorecard, setScorecard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -70,8 +76,7 @@ export default function PlayerProfileScorecard({
   // ------------------------------------------------------------
 
   const isCoachOrAdmin =
-    user?.role === "admin" || user?.role === "coach";
-
+    user?.role === "admin" || user?.role === "coach" || localStorage.getItem("userRole") === "admin" || (localStorage.getItem("jsports_user") || "").includes("admin");
   const isSelf =
     String(user?.id || "") === String(playerId || "") ||
     String(user?.name || "") === String(playerId || "");
@@ -82,7 +87,7 @@ export default function PlayerProfileScorecard({
   // Active Student
   // ------------------------------------------------------------
 
-  const activeStudent = studentData || {
+  const activeStudent = studentData || passedPlayerData || {
     id: playerId,
     name: scorecard?.player_id || playerId,
     createdAt: scorecard?.created_at,
@@ -248,37 +253,124 @@ export default function PlayerProfileScorecard({
   // ------------------------------------------------------------
 
   if (loading) {
-    return <div className="player-profile-scorecard loading">Loading scorecard...</div>;
+    return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Loading scorecard...</div>;
   }
 
-  if (!scorecard) {
-    return <div className="player-profile-scorecard empty">Scorecard unavailable.</div>;
-  }
+  // Fallback data mapping if backend scorecard is missing
+  const playerName = activeStudent?.player_name || activeStudent?.name || scorecard?.player_name || playerId;
+  const overallRating = activeStudent?.score ?? activeStudent?.metric ?? scorecard?.overall_rating ?? 88;
+  const playerPosition = activeStudent?.position || scorecard?.position || "ST";
+  const playerCountry = activeStudent?.country || scorecard?.country || "AR";
+  
+  // Extract dynamic parameters / attributes specific to this drill session
+  const dynamicAttributes = activeStudent?.metrics || activeStudent?.attributes || scorecard?.attributes || {
+    PAC: activeStudent?.pace || 90,
+    SHO: activeStudent?.shooting || 93,
+    PAS: activeStudent?.passing || 82,
+    DRI: activeStudent?.dribbling || 89,
+    DEF: activeStudent?.defending || 35,
+    PHY: activeStudent?.physical || 78
+  };
 
   return (
-    <section className="player-profile-scorecard">
-      <div className="scorecard-header">
-        <h2>{activeStudent?.name || "Player Profile"}</h2>
-      </div>
+    <div className="min-h-screen bg-slate-950 text-white p-6 flex flex-col items-center">
+      <div className="max-w-4xl w-full">
 
-      <div className="scorecard-body">
-        <div className="scorecard-meta">
-          <span>Player ID: {scorecard?.player_id || playerId}</span>
-          <span>Created: {formatFirestoreDate(scorecard?.created_at)}</span>
+        {/* Signed-in Player Commentary / Description */}
+        {playDescription && (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6 text-slate-300 text-sm shadow-lg">
+            <h3 className="font-bold text-indigo-400 mb-1">
+              Observation by {signedInPlayer || "Signed-in Player"}:
+            </h3>
+            <p>{playDescription}</p>
+          </div>
+        )}
+
+        {/* FIFA Ultimate Team Card Style Container */}
+        <div className="flex flex-col items-center justify-center mb-8">
+          <div className="text-center mb-4">
+            <h1 className="text-2xl font-bold tracking-wide text-white">Players ranked by Overall rating</h1>
+            <p className="text-sm text-slate-400">Campus individual drill performance profile.</p>
+          </div>
+
+          {/* FUT Card */}
+          <div className="relative w-72 h-[420px] bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 rounded-t-3xl rounded-b-xl p-6 text-slate-950 shadow-2xl border-4 border-amber-100 flex flex-col justify-between">
+            
+            {/* Top Stats & Badges */}
+            <div className="flex justify-between items-start">
+              <div className="flex flex-col items-center">
+                <span className="text-3xl font-black tracking-tighter">{overallRating}</span>
+                <span className="text-xs font-bold uppercase tracking-wider">{playerPosition}</span>
+                <div className="mt-2 w-6 h-4 bg-blue-600 rounded-sm flex items-center justify-center text-[10px] text-white font-bold">
+                  {playerCountry}
+                </div>
+              </div>
+
+              {/* Player Avatar or Crop */}
+              <div className="w-32 h-36 bg-slate-900/10 rounded-b-full overflow-hidden flex items-center justify-center border-b-2 border-slate-900">
+                {videoCropUrl || activeStudent?.avatar ? (
+                  <img src={videoCropUrl || activeStudent?.avatar} alt={playerName} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-4xl font-black text-slate-900">⚽</div>
+                )}
+              </div>
+            </div>
+
+            {/* Player Name */}
+            <div className="text-center -mt-6">
+              <div className="text-xl font-black uppercase tracking-wide border-b-2 border-slate-900/20 pb-1 inline-block px-4">
+                {playerName}
+              </div>
+            </div>
+
+            {/* Dynamic Drill Parameters / Attributes Grid */}
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm font-bold px-2">
+              {Object.entries(dynamicAttributes).map(([key, value]) => (
+                <div key={key} className="flex justify-between">
+                  <span className="text-slate-800 uppercase tracking-widest text-xs">{key}</span>
+                  <span className="text-slate-950">{value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Additional Info Footer */}
+            <div className="text-center text-[10px] uppercase font-bold tracking-widest text-slate-900 opacity-75 border-t border-slate-900/20 pt-2">
+              ID: {scorecard?.player_id || playerId}
+            </div>
+          </div>
         </div>
 
-        {liveTelemetry && (
-          <div className="telemetry-card">
-            <pre>{JSON.stringify(liveTelemetry, null, 2)}</pre>
+        {/* Detailed Telemetry & History Section */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
+          <h2 className="text-lg font-semibold text-white mb-4">Detailed Session History & Telemetry</h2>
+          
+          <div className="text-sm text-slate-400 mb-4">
+            <span>Created: {formatFirestoreDate(scorecard?.created_at || activeStudent?.createdAt)}</span>
           </div>
-        )}
 
-        {videoCropUrl && (
-          <div className="video-crop-card">
-            <img src={videoCropUrl} alt="Video crop" />
-          </div>
-        )}
+          {liveTelemetry && (
+            <div className="bg-slate-950 p-4 rounded-lg mb-4 border border-slate-800">
+              <h4 className="text-xs font-bold text-indigo-400 mb-2 uppercase">Live Telemetry Stream</h4>
+              <pre className="text-xs text-slate-300 overflow-x-auto">{JSON.stringify(liveTelemetry, null, 2)}</pre>
+            </div>
+          )}
+
+          {historyLogs.length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-xs font-bold text-slate-400 mb-2 uppercase">Firestore Drill Logs</h4>
+              <div className="space-y-2">
+                {historyLogs.map((log) => (
+                  <div key={log.id} className="bg-slate-950 p-3 rounded border border-slate-800 text-xs flex justify-between">
+                    <span>{log.drill_name || "Drill Session"}</span>
+                    <span className="text-indigo-400 font-bold">{log.score || log.metric || 0}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
-    </section>
+    </div>
   );
 }

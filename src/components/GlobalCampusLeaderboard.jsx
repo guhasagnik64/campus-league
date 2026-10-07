@@ -47,17 +47,20 @@ export default function GlobalCampusLeaderboard({
 
   const handlePlayerRowClick = (
     targetPlayerId,
-    playerData
+    playerData,
+    drillName
   ) => {
     const activePlayerId = localStorage.getItem("activePlayerId");
 
     // Parse the logged-in user object from localStorage
     let userRole = "";
+    let signedInPlayerName = "Signed-in Athlete";
     try {
       const storedUser = localStorage.getItem("jsports_user");
       if (storedUser) {
         const parsedUser = JSON.parse(storedUser);
         userRole = (parsedUser.role || parsedUser.userRole || "").toLowerCase().trim();
+        signedInPlayerName = parsedUser.name || parsedUser.username || "Signed-in Athlete";
       }
     } catch (e) {
       console.error("Error parsing user role:", e);
@@ -89,7 +92,17 @@ export default function GlobalCampusLeaderboard({
       onSelectPlayer(playerData);
     }
 
-    navigate(`/portfolio/${targetPlayerId}`);
+    // Get score metrics for personalized FIFA-style card and descriptive commentary
+    const pName = playerData.player_name || playerData.name || "Athlete";
+    const pScore = playerData.score ?? playerData.metric ?? playerData.performance ?? 0;
+
+    navigate(`/portfolio/${targetPlayerId}`, {
+      state: {
+        playerData,
+        signedInPlayer: signedInPlayerName,
+        playDescription: `Detailed performance review for ${pName} in drill "${drillName || 'Training Session'}", achieving a score of ${pScore}. Observed and documented from the perspective of ${signedInPlayerName}.`,
+      },
+    });
   };
 
   // ------------------------------------------------------------
@@ -604,6 +617,8 @@ export default function GlobalCampusLeaderboard({
                       )
                   );
 
+                const currentDrillName = session.drill_name || session.drill_id || "Completed Drill";
+
                 return (
                   <div
                     key={
@@ -616,9 +631,7 @@ export default function GlobalCampusLeaderboard({
                     <div className="px-5 py-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                       <div>
                         <h2 className="text-lg font-semibold text-white">
-                          {session.drill_name ||
-                            session.drill_id ||
-                            "Completed Drill"}
+                          {currentDrillName}
                         </h2>
 
                         <p className="text-sm text-slate-500 mt-1">
@@ -694,7 +707,8 @@ export default function GlobalCampusLeaderboard({
                                   onClick={() =>
                                     handlePlayerRowClick(
                                       playerId,
-                                      player
+                                      player,
+                                      currentDrillName
                                     )
                                   }
                                   className="border-b border-slate-800/70 hover:bg-slate-800/50 cursor-pointer transition"
