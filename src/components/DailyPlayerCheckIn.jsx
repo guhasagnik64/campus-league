@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 const API_BASE_URL = 'http://localhost:8000';
 
 export default function DailyPlayerCheckIn({ currentUser }) {
-  const playerName = currentUser?.name || localStorage.getItem('activePlayerName') || 'Arin';
-  const playerId = currentUser?.id || localStorage.getItem('activePlayerId') || 'Tracked_Arin';
+  const { playerId: routePlayerId } = useParams();
+  const playerId = routePlayerId || currentUser?.id || localStorage.getItem('activePlayerId') || 'Tracked_Arin';
+  const playerName = currentUser?.name || localStorage.getItem('activePlayerName') || playerId;
+
   // Firestore Athlete Terminal Handler
   const handleAthleteCheckIn = async (fullName, mobileNumber, association, coachName) => {
     const cleanMobile = mobileNumber.replace(/\D/g, '');
     const playerIdKey = `player_${cleanMobile}`;
     const userRef = doc(db, 'users', playerIdKey);
-
     const userSnap = await getDoc(userRef);
     if (!userSnap.exists()) {
       await setDoc(userRef, {
