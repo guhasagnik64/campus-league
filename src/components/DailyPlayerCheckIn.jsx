@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8000';
 
 export default function DailyPlayerCheckIn({ currentUser }) {
   const playerName = currentUser?.name || 'Sagnik Guha';
@@ -59,21 +59,25 @@ export default function DailyPlayerCheckIn({ currentUser }) {
       setLoadingReports(true);
       setError('');
       try {
-        const response = await fetch(`\({API_BASE_URL}/api/player-room/\){encodeURIComponent(playerId)}`);
-        if (response.ok) {
+        const targetUrl = `${API_BASE_URL}/api/player-room/${encodeURIComponent(playerId)}`;
+        console.log("DEBUG FETCH URL:", targetUrl);
+        
+        const response = await fetch(targetUrl);
+        const contentType = response.headers.get("content-type");
+        
+        if (response.ok && contentType && contentType.includes("application/json")) {
           const data = await response.json();
           setReports(data.reports || []);
         } else {
           setError('Failed to retrieve daily session telemetry.');
         }
       } catch (err) {
-        console.error('Failed to retrieve player match room reports:', err);
-        setError('Backend API offline or endpoint unreachable.');
+        setError('Network error connecting to telemetry server.');
+        setReports([]);
       } finally {
         setLoadingReports(false);
       }
     };
-
     if (playerId) fetchTelemetryReports();
   }, [playerId]);
 
@@ -200,7 +204,7 @@ export default function DailyPlayerCheckIn({ currentUser }) {
     }
   };
 
-  return React.createElement('div', { style: { padding: '1.5rem', backgroundColor: '#fff' } },
+ return React.createElement('div', { style: { padding: '1.5rem', backgroundColor: '#fff' } },
     React.createElement('h3', null, '📋 Pre-Drill Player Check-In & Intake Photo'),
     React.createElement('p', null, 'Active Roster Profile: ', playerName, ' (', playerId, ')'),
     React.createElement('div', { style: { marginTop: '1rem' } },
@@ -228,6 +232,21 @@ export default function DailyPlayerCheckIn({ currentUser }) {
         isSubmitting ? 'Submitting...' : '✔ Complete Pre-Drill Check-In'
       )
     ),
-    checkInStatus && React.createElement('p', null, checkInStatus)
+    checkInStatus && React.createElement('p', null, checkInStatus),
+    React.createElement('div', { style: { marginTop: '1.5rem', borderTop: '1px solid #ddd', paddingTop: '1rem' } },
+      React.createElement('h4', null, '📊 Session Telemetry & Analytics Reports'),
+      loadingReports && React.createElement('p', null, 'Loading telemetry data...'),
+      error && React.createElement('p', { style: { color: 'red' } }, error),
+      !loadingReports && reports.length === 0 && React.createElement('p', null, 'No telemetry reports found for this player yet.'),
+      reports.length > 0 && React.createElement('ul', { style: { listStyleType: 'none', padding: 0 } },
+        reports.map((report, idx) =>
+          React.createElement('li', { key: idx, style: { background: '#f9f9f9', padding: '10px', marginBottom: '8px', borderRadius: '4px', border: '1px solid #eee' } },
+            React.createElement('strong', null, `Event: ${report.metric_event || 'Drill Session'}`),
+            React.createElement('br'),
+            `Timestamp: ${report.timestamp || 'N/A'} | Velocity: ${report.velocity || 'N/A'}`
+          )
+        )
+      )
+    )
   );
 }
