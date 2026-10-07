@@ -5,9 +5,8 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 const API_BASE_URL = 'http://localhost:8000';
 
 export default function DailyPlayerCheckIn({ currentUser }) {
-  const playerName = currentUser?.name || 'Sagnik Guha';
-  const playerId = currentUser?.id || 'PLR-101';
-
+  const playerName = currentUser?.name || localStorage.getItem('activePlayerName') || 'Arin';
+  const playerId = currentUser?.id || localStorage.getItem('activePlayerId') || 'Tracked_Arin';
   // Firestore Athlete Terminal Handler
   const handleAthleteCheckIn = async (fullName, mobileNumber, association, coachName) => {
     const cleanMobile = mobileNumber.replace(/\D/g, '');
@@ -234,16 +233,20 @@ export default function DailyPlayerCheckIn({ currentUser }) {
     ),
     checkInStatus && React.createElement('p', null, checkInStatus),
     React.createElement('div', { style: { marginTop: '1.5rem', borderTop: '1px solid #ddd', paddingTop: '1rem' } },
-      React.createElement('h4', null, '📊 Session Telemetry & Analytics Reports'),
-      loadingReports && React.createElement('p', null, 'Loading telemetry data...'),
+      React.createElement('h4', null, '📊 FIFA-Style Player Scorecards & Telemetry'),
+      loadingReports && React.createElement('p', null, 'Loading player stats...'),
       error && React.createElement('p', { style: { color: 'red' } }, error),
-      !loadingReports && reports.length === 0 && React.createElement('p', null, 'No telemetry reports found for this player yet.'),
-      reports.length > 0 && React.createElement('ul', { style: { listStyleType: 'none', padding: 0 } },
+      !loadingReports && reports.length === 0 && React.createElement('p', null, 'No scorecard data found for this player yet.'),
+      reports.length > 0 && React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginTop: '10px' } },
         reports.map((report, idx) =>
-          React.createElement('li', { key: idx, style: { background: '#f9f9f9', padding: '10px', marginBottom: '8px', borderRadius: '4px', border: '1px solid #eee' } },
-            React.createElement('strong', null, `Event: ${report.metric_event || 'Drill Session'}`),
-            React.createElement('br'),
-            `Timestamp: ${report.timestamp || 'N/A'} | Velocity: ${report.velocity || 'N/A'}`
+          React.createElement('div', { key: idx, style: { background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)', color: '#fff', padding: '15px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' } },
+            React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '8px', marginBottom: '8px' } },
+              React.createElement('strong', { style: { fontSize: '1.1rem' } }, report.name || playerName),
+              React.createElement('span', { style: { background: '#ffd700', color: '#000', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' } }, `OVR: ${report.ovr_score || report.finalScore || '77'}`)
+            ),
+            React.createElement('p', { style: { margin: '4px 0' } }, `⚡ Top Speed / Velocity: ${report.speed || report.topSpeed || '29.0 km/h'}`),
+            React.createElement('p', { style: { margin: '4px 0' } }, `🎯 Passing Accuracy: ${report.pass_acc || report.retention || '82%'}`),
+            React.createElement('p', { style: { margin: '4px 0', fontSize: '0.9rem', opacity: 0.8 } }, `Drill: ${report.drill_name || 'Pass Support'}`)
           )
         )
       )
