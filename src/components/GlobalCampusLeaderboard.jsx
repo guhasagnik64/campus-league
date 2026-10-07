@@ -91,6 +91,7 @@ export default function GlobalCampusLeaderboard({
 
     navigate(`/portfolio/${targetPlayerId}`);
   };
+
   // ------------------------------------------------------------
   // NORMALIZE LEADERBOARD PAYLOAD
   // ------------------------------------------------------------
@@ -102,7 +103,6 @@ export default function GlobalCampusLeaderboard({
           return [];
         }
 
-        // Already an array of sessions
         if (
           Array.isArray(rawPayload) &&
           rawPayload.length > 0 &&
@@ -111,7 +111,6 @@ export default function GlobalCampusLeaderboard({
           return rawPayload;
         }
 
-        // Single session object
         if (
           typeof rawPayload === "object" &&
           !Array.isArray(rawPayload) &&
@@ -139,7 +138,6 @@ export default function GlobalCampusLeaderboard({
           ];
         }
 
-        // Array of players
         if (Array.isArray(rawPayload)) {
           return [
             {
@@ -275,10 +273,6 @@ export default function GlobalCampusLeaderboard({
             }
           }
 
-          // ----------------------------------------------------
-          // FALLBACK CACHE
-          // ----------------------------------------------------
-
           const cacheResponse =
             await fetch(
               "/coach_intel_cache.json"
@@ -326,17 +320,9 @@ export default function GlobalCampusLeaderboard({
       ]
     );
 
-  // ------------------------------------------------------------
-  // INITIAL LOAD
-  // ------------------------------------------------------------
-
   useEffect(() => {
     fetchLeaderboard(true);
   }, [fetchLeaderboard]);
-
-  // ------------------------------------------------------------
-  // FILTER LEADERBOARD
-  // ------------------------------------------------------------
 
   const filteredSessions =
     useMemo(() => {
@@ -357,10 +343,6 @@ export default function GlobalCampusLeaderboard({
             session.drill_name ||
             "";
 
-          // --------------------------------------------------
-          // DRILL FILTER
-          // --------------------------------------------------
-
           const matchesDrillFilter =
             selectedDrillType === "all" ||
             sessionDrillName ===
@@ -371,10 +353,6 @@ export default function GlobalCampusLeaderboard({
           if (!matchesDrillFilter) {
             return null;
           }
-
-          // --------------------------------------------------
-          // PLAYER FILTER
-          // --------------------------------------------------
 
           const playersList =
             (
@@ -436,10 +414,6 @@ export default function GlobalCampusLeaderboard({
       selectedDrillType,
     ]);
 
-  // ------------------------------------------------------------
-  // LOADING STATE
-  // ------------------------------------------------------------
-
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
@@ -456,20 +430,12 @@ export default function GlobalCampusLeaderboard({
     );
   }
 
-  // ------------------------------------------------------------
-  // MAIN UI
-  // ------------------------------------------------------------
-
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
       <div className="max-w-7xl mx-auto">
 
-        {/* ======================================================
-            HEADER
-        ====================================================== */}
-
+        {/* HEADER */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-
           <div>
             <h1 className="text-2xl font-bold text-white">
               Campus Leaderboard
@@ -482,9 +448,6 @@ export default function GlobalCampusLeaderboard({
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
-
-            {/* SEARCH */}
-
             <input
               type="text"
               value={searchTerm}
@@ -496,8 +459,6 @@ export default function GlobalCampusLeaderboard({
               placeholder="Search athlete or drill..."
               className="bg-slate-900 border border-slate-800 text-sm rounded-lg px-3 py-2 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
             />
-
-            {/* REFRESH */}
 
             <button
               type="button"
@@ -514,12 +475,8 @@ export default function GlobalCampusLeaderboard({
           </div>
         </div>
 
-        {/* ======================================================
-            TABS
-        ====================================================== */}
-
+        {/* TABS */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-2 mb-6 flex flex-wrap gap-2">
-
           <button
             type="button"
             onClick={() =>
@@ -549,14 +506,8 @@ export default function GlobalCampusLeaderboard({
           </button>
         </div>
 
-        {/* ======================================================
-            FILTERS
-        ====================================================== */}
-
+        {/* FILTERS */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-
-          {/* GROUP FILTER */}
-
           {activeTab === "group" && (
             <label className="block">
               <span className="block text-xs font-bold text-slate-400 mb-2">
@@ -585,8 +536,6 @@ export default function GlobalCampusLeaderboard({
               </select>
             </label>
           )}
-
-          {/* DRILL FILTER */}
 
           <label className="block">
             <span className="block text-xs font-bold text-slate-400 mb-2">
@@ -620,10 +569,7 @@ export default function GlobalCampusLeaderboard({
           </label>
         </div>
 
-        {/* ======================================================
-            LEADERBOARD FEED
-        ====================================================== */}
-
+        {/* LEADERBOARD FEED */}
         {filteredSessions.length ===
         0 ? (
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center">
@@ -639,7 +585,6 @@ export default function GlobalCampusLeaderboard({
           </div>
         ) : (
           <div className="space-y-6">
-
             {filteredSessions.map(
               (session, sIdx) => {
                 const sortedPlayers =
@@ -668,11 +613,7 @@ export default function GlobalCampusLeaderboard({
                     }
                     className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"
                   >
-
-                    {/* SESSION HEADER */}
-
                     <div className="px-5 py-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-
                       <div>
                         <h2 className="text-lg font-semibold text-white">
                           {session.drill_name ||
@@ -696,14 +637,10 @@ export default function GlobalCampusLeaderboard({
                       </div>
                     </div>
 
-                    {/* TABLE */}
-
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
-
                         <thead>
                           <tr className="border-b border-slate-800 text-left text-slate-500">
-
                             <th className="px-5 py-3 font-medium">
                               Rank
                             </th>
@@ -719,7 +656,6 @@ export default function GlobalCampusLeaderboard({
                             <th className="px-5 py-3 font-medium">
                               Score / Metric
                             </th>
-
                           </tr>
                         </thead>
 
@@ -763,13 +699,12 @@ export default function GlobalCampusLeaderboard({
                                   }
                                   className="border-b border-slate-800/70 hover:bg-slate-800/50 cursor-pointer transition"
                                 >
-
                                   <td className="px-5 py-4 text-slate-400 font-medium">
                                     #{pIdx + 1}
                                   </td>
 
                                   <td className="px-5 py-4">
-                                    <div className="font-medium text-white">
+                                    <div className="font-medium text-white hover:text-indigo-400 underline transition">
                                       {playerName}
                                     </div>
 
@@ -790,20 +725,17 @@ export default function GlobalCampusLeaderboard({
                                       {playerScore}
                                     </span>
                                   </td>
-
                                 </tr>
                               );
                             }
                           )}
                         </tbody>
-
                       </table>
                     </div>
                   </div>
                 );
               }
             )}
-
           </div>
         )}
       </div>
