@@ -3,14 +3,14 @@ import { io } from 'socket.io-client';
 import CoachPortfolioCV from './CoachPortfolioCV';
 
 // Fixed Port: Updated to 8000 to match live_scouting_engine.py
-const socket = io('https://your-backend-service.onrender.com');
+const socket = io('https://campus-league-app.onrender.com');
 
 // 1. Standalone Admin / Coach Multi-Player View Component
 export const GroupReportView = () => {
   const [reports, setReports] = useState({});
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/admin/group_report')
+    fetch('https://campus-league-app.onrender.com/api/admin/group_report')
       .then((res) => {
         if (!res.ok) {
           throw new Error(`HTTP status ${res.status}`);
@@ -142,7 +142,7 @@ export default function AnalyticsDashboard({ onAnalysisComplete, user, loggedInU
     formData.append('photo', uploadFile);
 
     try {
-      const res = await fetch('http://localhost:8000/api/players/register', {
+      const res = await fetch('https://campus-league-app.onrender.com/api/players/register', {
         method: 'POST',
         body: formData,
       });
