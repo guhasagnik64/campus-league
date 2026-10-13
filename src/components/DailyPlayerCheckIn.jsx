@@ -246,9 +246,9 @@ export default function DailyPlayerCheckIn({ currentUser }) {
               React.createElement('strong', { style: { fontSize: '1.1rem' } }, report.name || playerName),
               React.createElement('span', { style: { background: '#ffd700', color: '#000', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' } }, `OVR: ${report.ovr_score || report.finalScore || '77'}`)
             ),
-            React.createElement('p', { style: { margin: '4px 0' } }, `⚡ Top Speed / Velocity: ${report.speed || report.topSpeed || '29.0 km/h'}`),
-            React.createElement('p', { style: { margin: '4px 0' } }, `🎯 Passing Accuracy: ${report.pass_acc || report.retention || '82%'}`),
-            React.createElement('p', { style: { margin: '4px 0', fontSize: '0.9rem', opacity: 0.8 } }, `Drill: ${report.drill_name || 'Pass Support'}`)
+            React.createElement('p', { style: { margin: '4px 0' } }, `⚡ Top Speed / Velocity: ${report.speed || report.topSpeed || report.sprint_speed || '29.0 km/h'}`),
+            React.createElement('p', { style: { margin: '4px 0' } }, `🎯 Passing Accuracy: ${report.pass_acc || report.retention || report.pass_accuracy || '82%'}`),
+            React.createElement('p', { style: { margin: '4px 0', fontSize: '0.9rem', opacity: 0.8 } }, `Drill: ${report.drill_name || 'Pass Support'} · ${report.date_created || ''}`)
           )
         )
       )

@@ -11,6 +11,12 @@ import subprocess
 from datetime import timedelta
 from drill_analytics import save_analysis_to_firestore
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # ==========================================
 # 1. PARSE ARGUMENTS & MULTI-TENANT SETUP
 # ==========================================

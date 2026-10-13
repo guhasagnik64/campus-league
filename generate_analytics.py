@@ -226,6 +226,8 @@ def analyze_match(tenant_id="default_facility", facility_type="ACADEMY", player_
                     data.get("entity_id", "PLAYER_1"),
                     data.get("velocity_score", 24.0),
                     data.get("technical_score", 75),
+                    data.get("ovr_rating", 74),
+                    data.get("top_speed", 22.0),
                     data.get("suggestion", "")
                 ))
         except Exception as e:

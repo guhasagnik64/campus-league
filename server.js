@@ -11,39 +11,81 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-let admin = require('firebase-admin');
-if (admin && admin.default) {
-  admin = admin.default;
+let admin = null;
+
+try {
+  admin = require('firebase-admin');
+  if (admin && admin.default) {
+    admin = admin.default;
+  }
+} catch (e) {
+  console.warn("⚠️ [FIREBASE WARNING] firebase-admin module not found or failed to load. Running in local fallback mode.");
 }
 
-// Firebase Admin SDK Setup
-if (!admin.apps.length) {
+// Safe Firebase Admin SDK Setup
+// firebase-admin v14 moved the API surface: apps -> getApps(), credential.cert -> cert(),
+// firestore() -> require('firebase-admin/firestore').getFirestore(). The old names no
+// longer exist on the CJS export, so this block silently skipped init and every
+// Firestore write fell into the no-op stub below.
+const getAppsFn = admin && (admin.getApps || (() => admin.apps || []));
+const certFn = admin && (admin.cert || (admin.credential && admin.credential.cert));
+
+if (admin && getAppsFn && getAppsFn().length === 0) {
+  let serviceAccount = null;
   if (process.env.FIREBASE_CREDENTIALS) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
+    try {
+      serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+    } catch (err) {
+      console.error("⚠️ Failed to parse FIREBASE_CREDENTIALS:", err.message);
+    }
   } else {
-    // Fallback for local testing if file exists
     const credPath = path.join(process.cwd(), 'firebase_credentials.json');
     if (fs.existsSync(credPath)) {
-      const serviceAccount = JSON.parse(fs.readFileSync(credPath, 'utf8'));
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-      });
-    } else {
+      try {
+        serviceAccount = JSON.parse(fs.readFileSync(credPath, 'utf8'));
+      } catch (err) {
+        console.error("⚠️ Failed to parse firebase_credentials.json:", err.message);
+      }
+    }
+  }
+  try {
+    if (serviceAccount && certFn) {
+      admin.initializeApp({ credential: certFn(serviceAccount) });
+    } else if (!serviceAccount) {
       admin.initializeApp();
     }
+  } catch (err) {
+    console.error("⚠️ Failed to initialize Firebase app:", err.message);
   }
 }
 
-const db = admin.firestore();
-const firestoreDb = db;
-const firebaseAdmin = admin;
-
+// Safe Firestore & Admin exports fallback
+let firestoreDb = null;
+let firestoreFieldValue = null;
+try {
+  if (admin && getAppsFn && getAppsFn().length > 0) {
+    const firestoreModule = require('firebase-admin/firestore');
+    firestoreDb = firestoreModule.getFirestore ? firestoreModule.getFirestore() : admin.firestore();
+    firestoreFieldValue = firestoreModule.FieldValue || (admin.firestore && admin.firestore.FieldValue);
+  }
+} catch (err) {
+  console.error("⚠️ Failed to initialize Firestore client:", err.message);
+}
+if (!firestoreDb) {
+  console.warn("⚠️ [FIREBASE WARNING] Firestore unavailable — persistence routes will serve empty stubs.");
+  firestoreDb = {
+    collection: () => ({
+      doc: () => ({ set: async () => {}, get: async () => ({ exists: false }), update: async () => {} }),
+      add: async () => {},
+      get: async () => ({ docs: [] }),
+      where: () => ({ get: async () => ({ docs: [] }) })
+    })
+  };
+}
+const firebaseAdmin = { firestore: { FieldValue: firestoreFieldValue || { serverTimestamp: () => new Date() } } };
 // Resolve directory configurations for ES Modules syntax stability
-const TELEGRAM_BOT_TOKEN = "8794328547:AAHD-N7tZICeyLO0hNeB8CC7wlP5GNGXVEY";
-const STORAGE_CHAT_ID = "-1004377897036";
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const STORAGE_CHAT_ID = process.env.STORAGE_CHAT_ID || "";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -108,8 +150,6 @@ const storage = multer.diskStorage({
   },
 
   filename: (req, file, cb) => {
-    // Sanitize white space patterns to protect path parsing
-    // inside subprocess tracking executions.
     const cleanName =
       file.originalname.replace(
         /\s+/g,
@@ -152,7 +192,7 @@ const photoStorage = multer.diskStorage({
       );
 
     const cleanName =
-      `ref_\({cleanId}_\){Date.now()}${ext}`;
+      `ref_${cleanId}_${Date.now()}${ext}`;
 
     cb(null, cleanName);
   }
@@ -194,7 +234,6 @@ const io = new Server(server, {
 io.on(
   'connection',
   (socket) => {
-
     console.log(
       `[SOCKET CONNECTED] Active Data Client Pipeline Established: ${socket.id}`
     );
@@ -246,7 +285,6 @@ app.get(
 app.post(
   '/api/drills/configure',
   async (req, res) => {
-
     const {
       id,
       name,
@@ -302,7 +340,6 @@ app.post(
   '/api/upload',
   uploadPhoto.any(),
   (req, res) => {
-
     if (
       !req.files ||
       req.files.length === 0
@@ -313,7 +350,6 @@ app.post(
       });
     }
 
-    // Grab the first file regardless of field name.
     const uploadedFile =
       req.files[0];
 
@@ -325,10 +361,7 @@ app.post(
       req.body.player ||
       'SA';
 
-    // Copy photo into Known_players directory
-    // for persistent computer-vision memory.
     try {
-
       const knownPlayersDir =
         path.join(
           __dirname,
@@ -370,27 +403,18 @@ app.post(
       );
 
     } catch (copyErr) {
-
       console.error(
         '⚠️ [INTAKE COPY WARNING]: Failed to sync photo to Known_players:',
         copyErr
       );
     }
 
-    console.log(
-      `📸 [INTAKE PHOTO UPLOADED]: \({fileUrl} (Field: "\){uploadedFile.fieldname}")`
-    );
-
     return res.json({
       success: true,
-
       message:
         'Intake photo uploaded and synced to persistent player memory',
-
       url: fileUrl,
-
       filePath: fileUrl,
-
       filename:
         uploadedFile.filename
     });
@@ -408,7 +432,6 @@ app.post(
   ],
   uploadPhoto.any(),
   (req, res) => {
-
     if (
       !req.files ||
       req.files.length === 0
@@ -431,11 +454,7 @@ app.post(
       req.body.player ||
       'Arin';
 
-    // Also save a direct copy as
-    // {player}_attire.jpg in public/uploads
-    // for generate_analytics.py avatar resolver.
     try {
-
       const cleanPlayer =
         String(playerName)
           .toLowerCase()
@@ -479,7 +498,6 @@ app.post(
       );
 
     } catch (e) {
-
       console.error(
         '⚠️ [ATTIRE COPY WARNING]:',
         e.message
@@ -488,16 +506,12 @@ app.post(
 
     return res.json({
       success: true,
-
       message:
         'Attire intake photo saved successfully!',
-
       imageUrl:
         fileUrl,
-
       url:
         fileUrl,
-
       filename:
         uploadedFile.filename
     });
@@ -512,7 +526,6 @@ app.post(
   '/api/players/register',
   uploadPhoto.single('photo'),
   async (req, res) => {
-
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -539,12 +552,6 @@ app.post(
     const absolutePhotoPath =
       req.file.path;
 
-    console.log(
-      `📸 [PLAYER PHOTO REGISTERED] ID: \({playerId} | Name:\){name} | Saved to: ${absolutePhotoPath}`
-    );
-
-    // 1. Sync registered photo & player identity
-    // with coach_intel_cache.json.
     const cachePath =
       path.join(
         publicDir,
@@ -556,7 +563,6 @@ app.post(
     if (
       fs.existsSync(cachePath)
     ) {
-
       try {
         cacheData =
           JSON.parse(
@@ -588,7 +594,6 @@ app.post(
       )
     );
 
-    // 2. Insert/update default leaderboard entry in Firestore.
     try {
       await firestoreDb.collection('leaderboard').doc(playerId).set({
         player_id: playerId,
@@ -600,8 +605,6 @@ app.post(
       console.error('[FIRESTORE LEADERBOARD ERROR]:', e.message);
     }
 
-    // 3. Trigger Python feature extraction
-    // for real-time Re-ID vector indexing.
     const pythonExtractor =
       spawn(
         'python3',
@@ -636,23 +639,17 @@ app.post(
 
     return res.json({
       success: true,
-
       message:
         'Player reference image saved successfully in public directory and cache updated.',
-
       player: {
         player_id:
           playerId,
-
         name:
           name,
-
         group_id:
           groupId,
-
         photo_url:
           photoUrl,
-
         local_path:
           absolutePhotoPath
       }
@@ -667,7 +664,6 @@ app.post(
 app.get(
   '/api/player-reports',
   async (req, res) => {
-
     const playerName =
       req.query.player_name ||
       req.query.player_id ||
@@ -700,7 +696,6 @@ app.get(
     '/api/v1/:userId/scorecard'
   ],
   async (req, res) => {
-
     const userId =
       req.params.userId ||
       'default_user';
@@ -711,22 +706,16 @@ app.get(
       if (!doc.exists) {
         return res.json({
           success: true,
-
           player_id:
             userId,
-
           overallRating:
             85,
-
           sprintVelocity:
             '26.4 km/h',
-
           passAccuracy:
             '84%',
-
           drillsCompleted:
             10,
-
           radarStats: {
             pace: 82,
             passing: 84,
@@ -743,28 +732,119 @@ app.get(
     } catch (err) {
       return res.json({
         success: true,
-
         player_id:
           userId,
-
         overallRating:
           85,
-
         sprintVelocity:
           '26.4 km/h',
-
         passAccuracy:
           '84%',
-
         drillsCompleted:
           10,
-
         radarStats: {
           pace: 82,
           passing: 84,
           dribbling: 88,
           vision: 80
         }
+      });
+    }
+  }
+);
+
+// ========================================================================
+// 📈 PROCESS CV DRILL RESULTS & UPDATE LEADERBOARD (Dual Format Support)
+// ========================================================================
+
+app.post(
+  '/api/process-drill-results',
+  async (req, res) => {
+    try {
+      const payload = req.body;
+      console.log("🏆 [PROCESS DRILL RESULTS] Received payload:", payload);
+
+      // Format 1: Array of player leaderboard entries
+      if (Array.isArray(payload)) {
+        for (const playerEntry of payload) {
+          const playerId = playerEntry.player_id || playerEntry.id;
+          if (playerId) {
+            await firestoreDb.collection('leaderboard').doc(String(playerId)).set(playerEntry, { merge: true });
+          }
+        }
+      } 
+      // Format 2: Single object with playerId and metrics
+      else if (payload && payload.playerId && payload.metrics) {
+        const { playerId, playerName, drillName, metrics } = payload;
+        const nameToSave = playerName || playerId;
+        const ovrScore = metrics.ovr_score || 0;
+        const sprintSpeed = metrics.sprint_accel || 0;
+        const passAccuracy = metrics.pass_accuracy || 0;
+        const currentDate = new Date().toLocaleDateString('en-GB');
+
+        await firestoreDb.collection('daily_reports').add({
+          player_id: playerId,
+          player_name: nameToSave,
+          drill_name: drillName,
+          ovr_score: ovrScore,
+          sprint_speed: `${sprintSpeed} km/h`,
+          pass_accuracy: `${passAccuracy}%`,
+          date_created: currentDate,
+          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+        });
+
+        const leaderboardRef = firestoreDb.collection('leaderboard').doc(playerId);
+        const doc = await leaderboardRef.get();
+
+        if (doc.exists) {
+          const data = doc.data();
+          const existingTopSpeed = data.top_speed || 0;
+          const existingAvgPass = data.avg_pass_acc || 0;
+          const existingHighestOvr = data.highest_ovr || 0;
+          const existingTotalDrills = data.total_drills || 0;
+
+          await leaderboardRef.update({
+            player_name: nameToSave,
+            total_drills: existingTotalDrills + 1,
+            top_speed: Math.max(existingTopSpeed, sprintSpeed),
+            avg_pass_acc: Math.round((existingAvgPass + passAccuracy) / 2),
+            highest_ovr: Math.max(existingHighestOvr, ovrScore),
+            updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+          });
+        } else {
+          await leaderboardRef.set({
+            player_id: playerId,
+            player_name: nameToSave,
+            total_drills: 1,
+            top_speed: sprintSpeed,
+            avg_pass_acc: passAccuracy,
+            highest_ovr: ovrScore,
+            updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+
+        if (typeof io !== 'undefined' && io) {
+          io.emit(
+            'leaderboard_updated',
+            {
+              playerId,
+              playerName: nameToSave,
+              drillName,
+              metrics
+            }
+          );
+        }
+      }
+
+      return res.status(200).json({
+        status: 'success',
+        message: 'Leaderboard updated successfully'
+      });
+    } catch (err) {
+      console.error("⚠️ [LEADERBOARD SYNC ERROR]:", err.message);
+      return res.status(500).json({
+        success: false,
+        error: err.message
       });
     }
   }
@@ -783,9 +863,6 @@ app.post(
   ],
   upload.any(),
   (req, res) => {
-
-    // Grab uploaded file regardless of
-    // the key name used by the frontend.
     const uploadedFile =
       (
         req.files &&
@@ -808,29 +885,19 @@ app.post(
       req.body.playerName ||
       'SA';
 
-    console.log(
-      `🎬 [PROCESS VIDEO SUCCESS] File: \({uploadedFile?.filename || 'None'} | Key Name: "\){uploadedFile?.fieldname || ''}"`
-    );
-
-    // 1. Send success response immediately.
     res.json({
       success: true,
-
       message:
         'Video received successfully. Processing telemetry.',
-
       videoPath:
         uploadedFilePath || '',
-
       videoUrl:
         uploadedFile
           ? `/videos/${uploadedFile.filename}`
           : ''
     });
 
-    // 2. Spawn Python computer-vision process.
     if (uploadedFilePath) {
-
       const pythonProcess =
         spawn(
           'python3',
@@ -872,9 +939,7 @@ app.post(
   '/api/process-group-drill',
   uploadPhoto.array('player_photos'),
   (req, res) => {
-
     try {
-
       if (
         !req.files ||
         req.files.length === 0
@@ -901,33 +966,26 @@ app.post(
         players
       } = groupConfig;
 
-      const registeredPlayersDb =
-        {};
+      const registeredPlayersDb = {};
 
       players.forEach(
         (player) => {
-
           const file =
             req.files[
               player.photo_index
             ];
 
           if (file) {
-
             registeredPlayersDb[
               player.id
             ] = {
-
               player_id:
                 player.id,
-
               player_name:
                 player.name,
-
               group_id:
                 group_id ||
                 'Group_Alpha',
-
               image_path:
                 file.path
             };
@@ -935,16 +993,10 @@ app.post(
         }
       );
 
-      console.log(
-        `👥 [GROUP DRILL INITIATED] Roster Size: \({players.length} | Drill:\){drill_type} | Group: ${group_id}`
-      );
-
       res.json({
         success: true,
-
         message:
           `Group analysis initialized for ${players.length} players.`,
-
         group_id:
           group_id
       });
@@ -954,18 +1006,14 @@ app.post(
           'python3',
           [
             'analytics_engine.py',
-
             '--video',
             video_path,
-
             '--drill',
             drill_type ||
               'group_drill',
-
             '--group_id',
             group_id ||
               'Group_Alpha',
-
             '--roster_json',
             JSON.stringify(
               registeredPlayersDb
@@ -990,136 +1038,9 @@ app.post(
       );
 
     } catch (err) {
-
       console.error(
         `❌ [GROUP DRILL ERROR]: ${err.message}`
       );
-
-      return res.status(500).json({
-        success: false,
-        error: err.message
-      });
-    }
-  }
-);
-
-// ========================================================================
-// 📈 PROCESS CV DRILL RESULTS & UPDATE LEADERBOARD
-// ========================================================================
-
-app.post(
-  '/api/process-drill-results',
-  async (req, res) => {
-
-    const {
-      playerId,
-      playerName,
-      drillName,
-      metrics
-    } = req.body;
-
-    if (
-      !playerId ||
-      !metrics
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Missing playerId or metrics payload.'
-      });
-    }
-
-    const nameToSave =
-      playerName ||
-      playerId;
-
-    const ovrScore =
-      metrics.ovr_score ||
-      0;
-
-    const sprintSpeed =
-      metrics.sprint_accel ||
-      0;
-
-    const passAccuracy =
-      metrics.pass_accuracy ||
-      0;
-
-    const currentDate =
-      new Date().toLocaleDateString(
-        'en-GB'
-      );
-
-    try {
-      // A. Save match drill instance to individual daily reports in Firestore
-      await firestoreDb.collection('daily_reports').add({
-        player_id: playerId,
-        player_name: nameToSave,
-        drill_name: drillName,
-        ovr_score: ovrScore,
-        sprint_speed: `${sprintSpeed} km/h`,
-        pass_accuracy: `${passAccuracy}%`,
-        date_created: currentDate,
-        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
-      });
-
-      // B. Aggregated metrics into global leaderboard in Firestore
-      const leaderboardRef = firestoreDb.collection('leaderboard').doc(playerId);
-      const doc = await leaderboardRef.get();
-
-      if (doc.exists) {
-        const data = doc.data();
-        const existingTopSpeed = data.top_speed || 0;
-        const existingAvgPass = data.avg_pass_acc || 0;
-        const existingHighestOvr = data.highest_ovr || 0;
-        const existingTotalDrills = data.total_drills || 0;
-
-        await leaderboardRef.update({
-          player_name: nameToSave,
-          total_drills: existingTotalDrills + 1,
-          top_speed: Math.max(existingTopSpeed, sprintSpeed),
-          avg_pass_acc: Math.round((existingAvgPass + passAccuracy) / 2),
-          highest_ovr: Math.max(existingHighestOvr, ovrScore),
-          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
-        });
-      } else {
-        await leaderboardRef.set({
-          player_id: playerId,
-          player_name: nameToSave,
-          total_drills: 1,
-          top_speed: sprintSpeed,
-          avg_pass_acc: passAccuracy,
-          highest_ovr: ovrScore,
-          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
-        });
-      }
-
-      if (
-        typeof io !== 'undefined' &&
-        io
-      ) {
-
-        io.emit(
-          'leaderboard_updated',
-          {
-            playerId,
-            playerName:
-              nameToSave,
-            drillName,
-            metrics
-          }
-        );
-      }
-
-      return res.json({
-        success: true,
-
-        message:
-          `Telemetry processed for ${nameToSave} & Leaderboard updated!`
-      });
-
-    } catch (err) {
-      console.error(`[FIRESTORE UPDATE ERROR]: ${err.message}`);
 
       return res.status(500).json({
         success: false,
@@ -1160,7 +1081,6 @@ app.get(
 app.get(
   '/api/player-room/:playerId',
   async (req, res) => {
-
     const {
       playerId
     } = req.params;
@@ -1182,174 +1102,6 @@ app.get(
         error: err.message
       });
     }
-  }
-);
-
-// ========================================================================
-// AUTO-ANALYSIS ROUTE FOR DIRECT FILE PATH TRIGGERING FROM APP
-// ========================================================================
-
-app.post(
-  '/api/run-analysis',
-  (req, res) => {
-
-    const {
-      videoPath,
-      drillFormat,
-      playerTags,
-      playerName,
-      tenantId,
-      sessionMode
-    } = req.body;
-
-    if (!videoPath) {
-
-      return res.status(400).json({
-        success: false,
-        error:
-          'No video path target supplied by the frontend interface.'
-      });
-    }
-
-    const safeVideo =
-      videoPath.replace(
-        /[^a-zA-Z0-9_\.\/-]/g,
-        ''
-      );
-
-    const safeDrill =
-      (
-        drillFormat ||
-        'match'
-      ).replace(
-        /[^a-zA-Z0-9_-]/g,
-        ''
-      );
-
-    const safePlayer =
-      (
-        playerName ||
-        'Anonymous Player'
-      ).replace(
-        /[^a-zA-Z0-9_\s-]/g,
-        ''
-      );
-
-    const safeTenant =
-      (
-        tenantId ||
-        'default_facility'
-      ).replace(
-        /[^a-zA-Z0-9_-]/g,
-        ''
-      );
-
-    const safeMode =
-      (
-        sessionMode ||
-        'CASUAL_FUTSAL'
-      ).replace(
-        /[^a-zA-Z0-9_-]/g,
-        ''
-      );
-
-    const tagsString =
-      typeof playerTags === 'string'
-        ? playerTags
-        : JSON.stringify(
-            playerTags || []
-          );
-
-    console.log(
-      `🎬 Automated UI Request Received for Video: ${safeVideo}`
-    );
-
-    console.log(
-      `🎯 Session Drill Mode Configuration: ${safeDrill.toUpperCase()}`
-    );
-
-    res.json({
-      success: true,
-
-      message:
-        'AI tracking pipeline spawned successfully in the background!'
-    });
-
-    const pythonProcess =
-      spawn(
-        'python3',
-        [
-          'live_scouting_engine.py',
-
-          '--video',
-          safeVideo,
-
-          '--drill',
-          safeDrill,
-
-          '--player',
-          safePlayer,
-
-          '--tenant_id',
-          safeTenant,
-
-          '--session_mode',
-          safeMode,
-
-          '--player_tags',
-          tagsString
-        ]
-      );
-
-    pythonProcess.stdout.on(
-      'data',
-      (data) =>
-        console.log(
-          `[PIPELINE OUTPUT]: ${data.toString()}`
-        )
-    );
-
-    pythonProcess.stderr.on(
-      'data',
-      (data) =>
-        console.error(
-          `[PYTHON ERROR]: ${data.toString()}`
-        )
-    );
-
-    pythonProcess.on(
-      'close',
-      (code) => {
-
-        console.log(
-          `🏁 Python process finished with exit code ${code}`
-        );
-
-        if (code === 0) {
-
-          io.emit(
-            'pipeline_finished',
-            {
-              success: true,
-              videoPath:
-                safeVideo,
-              reportUrl:
-                '/api/download-report'
-            }
-          );
-
-        } else {
-
-          io.emit(
-            'pipeline_error',
-            {
-              message:
-                `Process exited with code ${code}`
-            }
-          );
-        }
-      }
-    );
   }
 );
 
@@ -1388,155 +1140,12 @@ app.get('/api/squads', async (req, res) => {
     });
   }
 });
-// ========================================================================
-// 📊 UPLOAD VIDEO, DYNAMIC RETENTION & COACH PORTFOLIO PIPELINE
-// ========================================================================
-
-app.post(
-  '/api/upload-analysis',
-  upload.single('video'),
-  async (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: 'No video file payload detected.'
-      });
-    }
-
-    const uploadedFilePath = req.file.path;
-    const selectedDrill = req.body.drillType || 'sagnik_drill';
-    const playerName = req.body.playerName || 'Anonymous Player';
-    const playerId = req.body.playerId || 'PLR-101';
-    
-    // --- Dynamic Expiry & Retention Calculation ---
-    const retentionDays = parseInt(req.body.retentionDays || 7, 10);
-    const createdDate = new Date();
-    const expireDate = new Date(createdDate.getTime() + retentionDays * 24 * 60 * 60 * 1000);
-    const expireAtIso = expireDate.toISOString();
-
-    const videoUrl = `/videos/${req.file.filename}`;
-
-    try {
-      // 1. Insert daily report record in Firestore
-      await firestoreDb.collection('daily_reports').add({
-        player_id: playerId,
-        player_name: playerName,
-        drill_name: selectedDrill,
-        ovr_score: 0,
-        date_created: createdDate.toISOString(),
-        retention_days: retentionDays,
-        expire_at: expireAtIso,
-        is_portfolio_proof: 0,
-        is_offloaded: 0,
-        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
-      });
-
-      // 2. Automated cleanup of expired non-portfolio records
-      const snapshot = await firestoreDb.collection('daily_reports')
-        .where('expire_at', '<', createdDate.toISOString())
-        .where('is_portfolio_proof', '==', 0)
-        .get();
-
-      const batch = firestoreDb.batch();
-      snapshot.docs.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      await batch.commit();
-
-      res.json({
-        success: true,
-        message: 'Video uploaded and analysis initialized successfully.',
-        videoUrl,
-        expireAt: expireAtIso
-      });
-    } catch (err) {
-      console.error(`❌ [FIRESTORE INSERT ERROR]: ${err.message}`);
-      res.status(500).json({ success: false, error: err.message });
-    }
-  }
-);
 
 // ========================================================================
-// 🏆 COACH PORTFOLIO PROOF ENDPOINTS
+// SERVER LISTEN STARTUP
 // ========================================================================
 
-app.post(
-  '/api/coach/portfolio-proof',
-  async (req, res) => {
-    const {
-      coachId,
-      playerId,
-      playerName,
-      initialShortcoming,
-      surpassedShortcoming,
-      beforeVideoUrl,
-      afterVideoUrl,
-      metricDelta,
-      reportId
-    } = req.body;
-
-    try {
-      await firestoreDb.collection('coach_portfolio_proofs').add({
-        coach_id: coachId || 'COACH_PRIMARY',
-        player_id: playerId,
-        player_name: playerName,
-        initial_shortcoming: initialShortcoming,
-        surpassed_shortcoming: surpassedShortcoming,
-        before_video_url: beforeVideoUrl,
-        after_video_url: afterVideoUrl,
-        metric_delta: metricDelta,
-        created_at: new Date().toISOString()
-      });
-
-      if (reportId) {
-        await firestoreDb.collection('daily_reports').doc(String(reportId)).update({
-          is_portfolio_proof: 1
-        });
-      }
-
-      res.json({
-        success: true,
-        message: 'Coach portfolio proof record created and locked against automatic purge.'
-      });
-    } catch (err) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  }
-);
-
-app.get(
-  '/api/coach/portfolio-proofs',
-  async (req, res) => {
-    const { coachId } = req.query;
-    try {
-      let query = firestoreDb.collection('coach_portfolio_proofs');
-      if (coachId) {
-        query = query.where('coach_id', '==', coachId);
-      }
-      const snapshot = await query.get();
-      const proofs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      res.json({ success: true, proofs });
-    } catch (err) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  }
-);
-
-// ========================================================================
-// STATIC FRONTEND BUILD ROUTING FOR RENDER DEPLOYMENT
-// ========================================================================
-
-app.use(express.static(path.join(__dirname, 'dist')));
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-// ========================================================================
-// SERVER LISTENING START
-// ========================================================================
-
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 8000;
 server.listen(PORT, () => {
-  console.log(`[CAMPUS LEAGUE BACKEND] Server running seamlessly on port ${PORT}`);
+  console.log(`🚀 [EXPRESS SERVER RUNNING] Listening on port ${PORT}`);
 });

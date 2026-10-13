@@ -1,3 +1,4 @@
 opencv-python
 pandas
 requests
+python-dotenv

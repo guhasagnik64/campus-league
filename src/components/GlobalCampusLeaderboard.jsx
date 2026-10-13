@@ -94,9 +94,9 @@ export default function GlobalCampusLeaderboard({
 
     // Get score metrics for personalized FIFA-style card and descriptive commentary
     const pName = playerData.player_name || playerData.name || "Athlete";
-    const pScore = playerData.score ?? playerData.metric ?? playerData.performance ?? 0;
+    const pScore = playerData.score ?? playerData.metric ?? playerData.performance ?? playerData.highest_ovr ?? playerData.ovr_score ?? 0;
 
-    navigate(`/portfolio/${targetPlayerId}`, {
+    navigate(`/portfolio/${encodeURIComponent(String(targetPlayerId || "unknown"))}`, {
       state: {
         playerData,
         signedInPlayer: signedInPlayerName,
@@ -118,7 +118,13 @@ export default function GlobalCampusLeaderboard({
 
         if (
           Array.isArray(rawPayload) &&
-          rawPayload.length > 0 &&
+          rawPayload.length === 0
+        ) {
+          return [];
+        }
+
+        if (
+          Array.isArray(rawPayload) &&
           rawPayload[0]?.players
         ) {
           return rawPayload;
@@ -607,12 +613,16 @@ export default function GlobalCampusLeaderboard({
                         b.score ??
                         b.metric ??
                         b.performance ??
+                        b.highest_ovr ??
+                        b.ovr_score ??
                         0
                       ) -
                       (
                         a.score ??
                         a.metric ??
                         a.performance ??
+                        a.highest_ovr ??
+                        a.ovr_score ??
                         0
                       )
                   );
@@ -680,7 +690,9 @@ export default function GlobalCampusLeaderboard({
                             ) => {
                               const playerId =
                                 player.player_id ||
-                                player.id;
+                                player.id ||
+                                player.player_name ||
+                                player.name;
 
                               const playerName =
                                 player.player_name ||
@@ -696,6 +708,8 @@ export default function GlobalCampusLeaderboard({
                                 player.score ??
                                 player.metric ??
                                 player.performance ??
+                                player.highest_ovr ??
+                                player.ovr_score ??
                                 0;
 
                               return (

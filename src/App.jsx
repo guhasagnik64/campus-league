@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 
 const socket = io('http://127.0.0.1:8000', {
-  autoConnect: false,
   transports: ['websocket', 'polling']
 });
 
@@ -402,7 +401,7 @@ const [groupRoster, setGroupRoster] = useState([
     try {
       // 2. Updated port from 8002 to active port 8000 via environment or fallback
       const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-      const response = await fetch(`${BASE_URL}/api/upload-drill`, {
+      const response = await fetch(`${BASE_URL}/api/process-group-drill`, {
         method: 'POST',
         body: formData,
       });
@@ -467,7 +466,7 @@ const [groupRoster, setGroupRoster] = useState([
   const handleOpenPlayerRoom = (player) => {
   setSelectedPlayerForRoom(player);
   setSelectedPlayerId(player.id || player.player_id);
-  setActiveTab('daily-reports'); // Or 'Daily Reports' depending on your tab name state key
+  setActiveTab('playerRoom');
 };
 
   const handlePlayerRegistered = (playerData) => {
@@ -502,7 +501,7 @@ const [groupRoster, setGroupRoster] = useState([
   const [loginError, setLoginError] = useState('');
   const [posts, setPosts] = useState([]);
   const [newPostText, setNewPostText] = useState('');
-  const [ads, setAds] = useState([{ text: "⚽ LOADING J-SPORTS PLATFORM...", bg: '#091702' }]);
+  const [ads, setAds] = useState([{ text: "⚽ Welcome to J-Sports Platform", bg: '#091702' }]);
   const [adIndex, setAdIndex] = useState(0);
   const [futsalGrounds, setFutsalGrounds] = useState([]);
   const [shopItems, setShopItems] = useState([]);
@@ -591,7 +590,7 @@ const [groupRoster, setGroupRoster] = useState([
     const qPosts = query(collection(db, "posts"), orderBy("createdAt", "desc"));
     const unsubPosts = onSnapshot(qPosts, (s) => setPosts(s.docs.map(d => ({ id: d.id, ...d.data() }))));
 
-    socket.on('drill_telemetry_update', (data) => setDrillAnalyticsData(data));
+    socket.on('ui_telemetry_broadcast', (data) => setDrillAnalyticsData(data));
 
     const timer = setInterval(() => { if (ads.length > 0) setAdIndex((p) => (p + 1) % ads.length); }, 5000);
 
@@ -758,41 +757,9 @@ const handleLaunchAnalysis = async () => {
         createdAt: new Date().toISOString()
       };
 
-      // 1. UPDATE DRILL STATS STATE
-      if (typeof setDrillStats === 'function') {
-        setDrillStats(finalData);
-      }
-
-      // 2. UPDATE DAILY REPORT FOR LOGGED-IN USER
-      if (typeof setDailyReport === 'function') {
-        setDailyReport((prev) => ({
-          ...prev,
-          playerName: activePlayerName,
-          passAccuracy: `${calculatedPass}%`,
-          receptionOrientation: `${calculatedControl}%`,
-          sprintAccel: `${calculatedSprint} km/h`,
-          overallScore: calculatedScore,
-          coachFeedback: `Verified session complete for \({selectedDrill}. High pass accuracy recorded at\){calculatedPass}%.`
-        }));
-      }
-
-      // 3. UPDATE LEADERBOARD WITH LOGGED-IN USER'S NAME
-      if (typeof setLeaderboardData === 'function') {
-        setLeaderboardData((prevList) => [
-          {
-            id: `temp_${Date.now()}`,
-            player_name: activePlayerName,
-            group: user?.group || "default_group",
-            score: calculatedScore,
-            drill_type: selectedDrill
-          },
-          ...(Array.isArray(prevList) ? prevList : [])
-        ]);
-      }
-
-      // 4. NON-BLOCKING FIRESTORE PERSISTENCE
+      // 1. NON-BLOCKING FIRESTORE PERSISTENCE
       try {
-        await addDoc(collection(db, "leaderboards"), {
+        await addDoc(collection(db, "leaderboard"), {
           ...finalData,
           createdAt: serverTimestamp()
         });
@@ -1735,7 +1702,9 @@ const handleLaunchAnalysis = async () => {
         currentUser={{
           id:
             selectedPlayerForRoom.player_id ||
-            selectedPlayerForRoom.id,
+            selectedPlayerForRoom.id ||
+            selectedPlayerForRoom.player_name ||
+            selectedPlayerForRoom.name,
           name:
             selectedPlayerForRoom.player_name ||
             selectedPlayerForRoom.name

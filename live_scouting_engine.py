@@ -50,12 +50,15 @@ def fetch_firestore_drill_rules(drill_document_id='inside_outside_touch_moving')
 
 # Custom Drill Analytics Module Integration
 try:
-    from drill_analytics import run_drill_analysis, analyze_universal_drill, analyze_all_pass_support_groups
+    from drill_analytics import run_drill_analysis, analyze_universal_drill, analyze_all_pass_support_groups, head_yaw_from_keypoints, SCAN_YAW_THRESHOLD
 except ImportError:
     def run_drill_analysis(drill, frame_data):
         return {"drill": drill, "shot_velocity_kmh": 85, "acceleration_ms2": 8.5}
     def analyze_all_pass_support_groups(frame_data, group_size=3):
         return {"status": "Fallback", "groups": [], "players": []}
+    def head_yaw_from_keypoints(kpt):
+        return 0.0
+    SCAN_YAW_THRESHOLD = 0.6
 
 # --- DYNAMIC DRILL RULE RETRIEVAL ---
 def get_drill_rules(drill_id):
@@ -87,11 +90,24 @@ try:
 except Exception as e:
     print(f"[SYSTEM WARNING] WebSocket server offline. Streaming disabled. Logging locally only: {e}", flush=True)
 
-# --- GEMINI API CONFIGURATION WITH ENVIRONMENT FALLBACK ---
-if "GEMINI_API_KEY" not in os.environ:
-    os.environ["GEMINI_API_KEY"] = "AIzaSyBNnwIHA4ykGpqgdhNZPa4NPaavgMI4zbk"
+# --- ENVIRONMENT CONFIGURATION (.env LOADER) ---
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("[SYSTEM WARNING] python-dotenv not installed. Skipping .env auto-load.", flush=True)
 
-client = genai.Client()
+# --- GEMINI API CONFIGURATION WITH ENVIRONMENT FALLBACK ---
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+client = None
+if GEMINI_API_KEY:
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        print("[SYSTEM] Gemini API client initialized.", flush=True)
+    except Exception as e:
+        print(f"[SYSTEM WARNING] Could not initialize Gemini client: {e}", flush=True)
+else:
+    print("[SYSTEM WARNING] GEMINI_API_KEY is not configured (add it to your .env file). Gemini features disabled.", flush=True)
 
 # --- INITIALIZE NATIVE OPENCV FACE DETECTOR ---
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
@@ -249,11 +265,126 @@ track_to_real_name_map = {}
 cut_tracking_state = {}
 tracked_entities = {}
 player_rivalry_stats = {}
+track_yaw_state = {}   # assigned_id -> last head yaw, for look-behind edge detection
 raw_coordinate_data = [] # Coordinates container for tracking data export
 accumulated_frame_history = [] # Container for multi-group sequential tracking telemetry
 
+
+def consolidate_track_fragments(coord_rows, identity_map, registry):
+    """
+    The tracker drops and re-acquires players mid-video, producing many
+    fragments (track IDs) for one physical athlete. Merge fragments that
+    are close in time AND space (and consistent in kit colour) so each
+    real player publishes as ONE leaderboard entry.
+    Returns a list of clusters: {name, track_ids, detections, stats_keys}.
+    """
+    per_track = {}
+    for row in coord_rows:
+        t = int(row["track_id"])
+        info = per_track.setdefault(t, {
+            "first_frame": row["frame"], "last_frame": row["frame"],
+            "first_pos": (row["x"], row["y"]), "last_pos": (row["x"], row["y"]),
+            "count": 0,
+        })
+        info["count"] += 1
+        if row["frame"] < info["first_frame"]:
+            info["first_frame"] = row["frame"]
+            info["first_pos"] = (row["x"], row["y"])
+        if row["frame"] > info["last_frame"]:
+            info["last_frame"] = row["frame"]
+            info["last_pos"] = (row["x"], row["y"])
+
+    kit_of = {}
+    for assigned_id in identity_map:
+        parts = assigned_id.split("_")
+        if len(parts) >= 4 and parts[0] == "Tracked":
+            try:
+                kit_of[int(parts[-1])] = "_".join(parts[1:-1])
+            except ValueError:
+                pass
+
+    def identity_of(tid):
+        kit = kit_of.get(tid)
+        assigned = f"Tracked_{kit}_{tid}" if kit else None
+        name = identity_map.get(assigned) if assigned else None
+        return name if name else f"Player_{tid}"
+
+    tracks = sorted(per_track.keys())
+    parent = {t: t for t in tracks}
+
+    def find(t):
+        while parent[t] != t:
+            parent[t] = parent[parent[t]]
+            t = parent[t]
+        return t
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    MAX_GAP = 40           # analyzed frames between fragments still considered one person
+    OVERLAP_TOLERANCE = 3  # ID-switch frames where both IDs coexist at the same spot
+    BASE_JUMP = 220.0      # px allowance for box jitter / a step or two
+    PER_FRAME_JUMP = 80.0  # extra px allowance per frame of gap (sprint headroom)
+    MAX_JUMP_CAP = 1000.0
+
+    ordered = sorted(tracks, key=lambda t: (per_track[t]["first_frame"], t))
+    recent = []
+    for t in ordered:
+        info_t = per_track[t]
+        for u in recent:
+            info_u = per_track[u]
+            overlap = info_u["last_frame"] - info_t["first_frame"]
+            if overlap > OVERLAP_TOLERANCE:
+                continue  # two places at once for too long -> different people
+            ku, kt = kit_of.get(u), kit_of.get(t)
+            if ku and kt and ku != kt:
+                continue  # different kit -> different person
+            gap = max(0, info_t["first_frame"] - info_u["last_frame"])
+            if gap > MAX_GAP:
+                continue
+            limit = BASE_JUMP if overlap >= 0 else min(BASE_JUMP + PER_FRAME_JUMP * gap, MAX_JUMP_CAP)
+            dist = float(np.hypot(
+                info_t["first_pos"][0] - info_u["last_pos"][0],
+                info_t["first_pos"][1] - info_u["last_pos"][1],
+            ))
+            if dist <= limit:
+                union(u, t)
+                break
+        recent.append(t)
+        recent = [u for u in recent if info_t["first_frame"] - per_track[u]["last_frame"] <= MAX_GAP]
+
+    clusters = {}
+    for t in tracks:
+        clusters.setdefault(find(t), []).append(t)
+
+    merged = []
+    for members in clusters.values():
+        detections = sum(per_track[t]["count"] for t in members)
+        # Prefer a real registered name carried by any fragment
+        names = [identity_of(t) for t in members]
+        real_names = [n for n in names if n in registry]
+        if real_names:
+            best_name = max(real_names, key=lambda n: sum(
+                per_track[t]["count"] for t in members if identity_of(t) == n))
+        else:
+            best_name = f"Player_{min(members)}"
+        merged.append({
+            "name": best_name,
+            "track_ids": members,
+            "detections": detections,
+            "stat_keys": names,
+        })
+
+    merged.sort(key=lambda c: c["detections"], reverse=True)
+    min_detections = 8
+    cap = max(3, len(registry))
+    kept = [c for c in merged if c["detections"] >= min_detections]
+    return kept[:cap] if kept else merged[:1]
+
 print("[SYSTEM] Loading tracking model layer...", flush=True)
-yolo_model = YOLO("yolov8n.pt")
+yolo_model = YOLO("yolov8n-pose.pt")
 
 # --- INITIALIZE OPENCV CAPTURE & VIDEO WRITER ---
 try:
@@ -274,7 +405,8 @@ COACH_THRESHOLD = cursor.fetchone()[0]
 
 print("[SYSTEM] Successfully established stable video frame pipeline. Processing...", flush=True)
 
-FRAME_SKIP_INTERVAL = 3
+FRAME_SKIP_INTERVAL = 5
+INFERENCE_DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
 frame_idx = 0
 
 try:
@@ -298,12 +430,13 @@ try:
             results = yolo_model.track(
                 frame,
                 persist=True,
-                tracker="bytetrack.yaml",
+                tracker="trackers/botsort_reid.yaml",
                 classes=[0],
                 conf=0.30,      # <-- Lowered confidence threshold to catch all players on the court
                 iou=0.50,       # <-- Prevents overlapping player boxes from merging/disappearing
                 verbose=False,
-                half=True
+                half=True,
+                device=INFERENCE_DEVICE
             )
         
         # --- Handle empty detections ---
@@ -313,11 +446,18 @@ try:
         if results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu().numpy()
             track_ids = results[0].boxes.id.cpu().numpy().astype(int)
-            
+
+            keypoints_data = None
+            if results[0].keypoints is not None:
+                try:
+                    keypoints_data = results[0].keypoints.data.cpu().numpy()
+                except Exception:
+                    keypoints_data = None
+
             # Construct frame state for multi-group collection
             current_frame_players = []
-            
-            for box, track_id in zip(boxes, track_ids):
+
+            for box_idx, (box, track_id) in enumerate(zip(boxes, track_ids)):
                 try:
                     x1, y1, x2, y2 = map(int, box)
                     box_w, box_h = x2 - x1, y2 - y1
@@ -371,7 +511,16 @@ try:
                         except Exception:
                             track_to_real_name_map[assigned_id] = target_player_name if target_player_name != "Anonymous Player" else assigned_id
                     identity_marker = track_to_real_name_map.get(assigned_id, assigned_id)
-                    
+
+                    # Shoulder-check ("look behind") detection via pose head yaw
+                    head_yaw_value = 0.0
+                    if keypoints_data is not None and box_idx < len(keypoints_data):
+                        head_yaw_value = head_yaw_from_keypoints(keypoints_data[box_idx])
+                    prev_yaw = track_yaw_state.get(assigned_id, 0.0)
+                    look_behind_now = abs(head_yaw_value) > SCAN_YAW_THRESHOLD
+                    look_behind_edge = look_behind_now and abs(prev_yaw) <= SCAN_YAW_THRESHOLD
+                    track_yaw_state[assigned_id] = head_yaw_value
+
                     # Pixel Displacement & Speed Calculation
                     displacement = 0.0
                     if assigned_id in tracked_entities:
@@ -571,11 +720,18 @@ finally:
     # 📊 LEADERBOARD DATABASE SYNC VIA EXPRESS HTTP ROUTE (MULTI-PLAYER)
     # ====================================================================
     try:
-        for player_id, stats in player_rivalry_stats.items():
-            display_name = player_id if player_id != "Anonymous Player" else "Player_Unassigned"
-            
-            real_top_speed = min(stats.get("top_speed", 0.0), 36.0)
-            clutch_passes = stats.get("clutch_passes", 0)
+        raw_track_count = len(set(r["track_id"] for r in raw_coordinate_data))
+        clusters = consolidate_track_fragments(raw_coordinate_data, track_to_real_name_map, known_metadata)
+        print(f"🏆 [IDENTITY MERGE] {raw_track_count} raw track IDs -> {len(clusters)} athletes published", flush=True)
+
+        for cluster in clusters:
+            stats_list = [player_rivalry_stats[k] for k in cluster["stat_keys"] if k in player_rivalry_stats]
+            if not stats_list:
+                continue
+            display_name = cluster["name"] if cluster["name"] != "Anonymous Player" else "Player_Unassigned"
+
+            real_top_speed = min(max(s.get("top_speed", 0.0) for s in stats_list), 36.0)
+            clutch_passes = sum(s.get("clutch_passes", 0) for s in stats_list)
 
             dynamic_pass_acc = min(100, max(60, int(70 + (clutch_passes * 5))))
             dynamic_ovr = min(99, max(50, int((real_top_speed * 1.5) + (dynamic_pass_acc * 0.5))))
@@ -591,8 +747,11 @@ finally:
                 }
             }
 
-            res = requests.post("http://localhost:8000/api/process-drill-results", json=leaderboard_payload, timeout=5)
-            print(f"🏆 [LEADERBOARD AUTO-SYNC - {display_name}]: {res.json()}", flush=True)
+            try:
+                res = requests.post("http://localhost:8000/api/process-drill-results", json=leaderboard_payload, timeout=30)
+                print(f"🏆 [LEADERBOARD AUTO-SYNC - {display_name}]: {res.json()}", flush=True)
+            except Exception as single_sync_err:
+                print(f"⚠️ [LEADERBOARD SYNC WARNING - {display_name}]: {single_sync_err}", flush=True)
     except Exception as sync_err:
         print(f"⚠️ [LEADERBOARD SYNC WARNING] Failed pushing drill results to Express: {sync_err}", flush=True)
 

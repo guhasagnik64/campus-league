@@ -1,5 +1,148 @@
 {
-    "status": "PROCESSING",
-    "message": "Computer vision pipeline analyzing frames in background...",
-    "lastUpdated": "2026-08-31 23:01:32"
+    "generalScore": 85,
+    "coachReport": "Match Telemetry Complete. Share to Campus Feed before the countdown expires!",
+    "leaderboardFeed": [
+        {
+            "drill_id": "PASS_SUPPORT_20261007",
+            "drill_name": "Pass Support",
+            "date": "October 07, 2026",
+            "players": [
+                {
+                    "rank": 1,
+                    "name": "Arin",
+                    "player_id": "Tracked_Arin",
+                    "avatar_crop": "/crops/crop_arin.jpg",
+                    "speed": "29.0 km/h",
+                    "pass_acc": "82%",
+                    "ovr_score": 77,
+                    "is_registered": false
+                },
+                {
+                    "rank": 2,
+                    "name": "Unregistered Player #2",
+                    "player_id": "Crop_002",
+                    "avatar_crop": "/crops/crop_player_2.jpg",
+                    "speed": "26.2 km/h",
+                    "pass_acc": "76%",
+                    "ovr_score": 72,
+                    "is_registered": false
+                },
+                {
+                    "rank": 3,
+                    "name": "Unregistered Player #3",
+                    "player_id": "Crop_003",
+                    "avatar_crop": "/crops/crop_player_3.jpg",
+                    "speed": "24.8 km/h",
+                    "pass_acc": "72%",
+                    "ovr_score": 68,
+                    "is_registered": false
+                }
+            ]
+        }
+    ],
+    "individualPortals": {
+        "Player_127": {
+            "metadata": {
+                "topSpeed": "0.0 km/h",
+                "finalScore": 70.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 0.0 km/h | Competitive Index: 0.0"
+        },
+        "Player_125": {
+            "metadata": {
+                "topSpeed": "36.0 km/h",
+                "finalScore": 99.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 36.0 km/h | Competitive Index: 64.0"
+        },
+        "Player_124": {
+            "metadata": {
+                "topSpeed": "5.1 km/h",
+                "finalScore": 74.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 5.1 km/h | Competitive Index: 7.6"
+        },
+        "Player_123": {
+            "metadata": {
+                "topSpeed": "8.6 km/h",
+                "finalScore": 76.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 8.6 km/h | Competitive Index: 12.9"
+        },
+        "Player_122": {
+            "metadata": {
+                "topSpeed": "15.5 km/h",
+                "finalScore": 88.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 15.5 km/h | Competitive Index: 53.2"
+        },
+        "Player_121": {
+            "metadata": {
+                "topSpeed": "10.2 km/h",
+                "finalScore": 78.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 10.2 km/h | Competitive Index: 15.3"
+        },
+        "Player_119": {
+            "metadata": {
+                "topSpeed": "10.7 km/h",
+                "finalScore": 78.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 10.7 km/h | Competitive Index: 16.0"
+        },
+        "Player_105": {
+            "metadata": {
+                "topSpeed": "0.0 km/h",
+                "finalScore": 70.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 0.0 km/h | Competitive Index: 0.0"
+        },
+        "Player_104": {
+            "metadata": {
+                "topSpeed": "10.6 km/h",
+                "finalScore": 78.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 10.6 km/h | Competitive Index: 15.9"
+        },
+        "Player_103": {
+            "metadata": {
+                "topSpeed": "9.2 km/h",
+                "finalScore": 77.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 9.2 km/h | Competitive Index: 13.8"
+        }
+    },
+    "sessionPoints": 250,
+    "tenant_id": "default_facility",
+    "createdAt": "2026-10-11T17:51:17.501236+00:00Z",
+    "expiresAt": "2026-10-11T20:51:17.501236+00:00Z",
+    "isPublished": false,
+    "feedActivities": [
+        {
+            "id": "futsal_default_facility",
+            "playerName": "Match Evaluation Engine",
+            "team": "default_facility",
+            "content": "\u26a1 High-intensity futsal session processed."
+        }
+    ]
 }

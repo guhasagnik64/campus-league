@@ -3,7 +3,13 @@ import sqlite3
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 def sync_local_to_json(tenant_id="default_facility"):
     print(f"\n--- CONNECTING TO LOCAL PRACTICE INTEL DB (TENANT: {tenant_id}) ---")
@@ -29,7 +35,7 @@ def sync_local_to_json(tenant_id="default_facility"):
         print(f"[SUCCESS] Found {len(rows)} data rows. Building JSON cache...")
 
         # Calculate 3-hour expiration window
-        created_at = datetime.utcnow()
+        created_at = datetime.now(timezone.utc)
         expires_at = (created_at + timedelta(hours=3)).isoformat() + "Z"
 
         individual_portals = {}
@@ -65,14 +71,30 @@ def sync_local_to_json(tenant_id="default_facility"):
             ]
         }
             
-        # Target stream directory
+        # Target stream directory (storage_server.py expiration gate)
         output_path = os.path.join("stream", "coach_intel_cache.json")
         os.makedirs("stream", exist_ok=True)
-        
+
         with open(output_path, "w") as f:
             json.dump(payload, f, indent=4)
-            
-        print(f"📦 Successfully created ephemeral cache: {output_path}")
+
+        # Frontend reads /coach_intel_cache.json from public/ (served by Vite).
+        # Merge over the existing file so attire check-in fields survive.
+        public_path = os.path.join("public", "coach_intel_cache.json")
+        existing = {}
+        if os.path.exists(public_path):
+            try:
+                with open(public_path, "r") as f:
+                    existing = json.load(f)
+            except Exception:
+                existing = {}
+
+        merged = {**existing, **payload}
+
+        with open(public_path, "w") as f:
+            json.dump(merged, f, indent=4)
+
+        print(f"📦 Successfully created ephemeral cache: {output_path} + {public_path}")
         print("--- SYNC COMPLETE ---")
         
     except Exception as e:

@@ -1,0 +1,57 @@
+{
+    "tenant_id": "arin",
+    "last_updated": "2026-08-15 00:28:14",
+    "lastUpdated": "2026-08-15 00:28:14",
+    "trackedFaceUrl": "/tenants/arin/tracked_player_1.jpg",
+    "generalSquadScore": 87,
+    "sessionPoints": 280,
+    "totalPlayersTracked": 3,
+    "highlightClip": "/tenants/arin/micro_clip_3_players_drill_1.mp4",
+    "overallAnalysis": "Live evaluation completed for [DRIBBLING]. Total athletes evaluated: 3.",
+    "squadRoster": [
+        {
+            "playerId": "P-101",
+            "playerName": "Academy Player #3",
+            "technicalScore": 81,
+            "maxSpeed": "19.8 km/h",
+            "remark": "DRIBBLING_PERFECTION",
+            "suggestedFix": "Maintained brilliant execution posture vectors.",
+            "faceUrl": "/tenants/arin/tracked_player_1.jpg"
+        },
+        {
+            "playerId": "P-102",
+            "playerName": "Rahul Sharma",
+            "technicalScore": 92,
+            "maxSpeed": "28.5 km/h",
+            "remark": "DRIBBLING_PERFECTION",
+            "suggestedFix": "Maintained brilliant execution posture vectors.",
+            "faceUrl": "/tenants/arin/tracked_player_2.jpg"
+        },
+        {
+            "playerId": "P-103",
+            "playerName": "Sagnik Guha",
+            "technicalScore": 88,
+            "maxSpeed": "24.2 km/h",
+            "remark": "DRIBBLING_PERFECTION",
+            "suggestedFix": "Maintained brilliant execution posture vectors.",
+            "faceUrl": "/tenants/arin/tracked_player_3.jpg"
+        }
+    ],
+    "individualPortals": {
+        "Everyday Best Performer": {
+            "metadata": {
+                "playerName": "Rahul Sharma",
+                "schoolName": "Campus Elite Pool",
+                "position": "Tactical Operator",
+                "retention": "94%",
+                "topSpeed": "28.5 km/h",
+                "isDailyMVP": true,
+                "finalScore": 92,
+                "isPremiumUser": true,
+                "tier": "subscribed",
+                "trackedFaceUrl": "/tenants/arin/tracked_player_1.jpg"
+            },
+            "content": "Outstanding technical performance score maintained throughout [DRIBBLING] drill evaluation."
+        }
+    }
+}

@@ -38,11 +38,11 @@ def run_ad_manager():
         
         sponsor = input("Enter Sponsor Name (e.g., Nike): ")
         title = input("Enter Campaign Headline: ")
-       banner = input("Enter Image or Video Path (e.g., http://localhost:8001/stream/nike_banner.png): ")
+        banner = input("Enter Image or Video Path (e.g., http://localhost:8001/stream/nike_banner.png): ")
 
-if not banner:
-    banner = "http://localhost:8001/stream/sponsor_logo.png"
-            
+        if not banner:
+            banner = "http://localhost:8001/stream/sponsor_logo.png"
+
         cursor.execute("""
             INSERT INTO campus_advertisements (sponsor_name, campaign_title, banner_url, is_active)
             VALUES (?, ?, ?, 1)

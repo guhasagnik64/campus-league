@@ -270,7 +270,7 @@ async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File
             content = await file.read()
             buffer.write(content)
 
-        file_url = f"http://localhost:8000/stream/{safe_filename}"
+        file_url = f"http://localhost:8001/stream/{safe_filename}"
 
         background_tasks.add_task(delete_file_after_delay, file_path, 86400)
         return {"mediaUrl": file_url, "filename": safe_filename, "message": "Upload successful!"}
@@ -415,5 +415,5 @@ async def get_group_report():
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 Custom Cloud Space Server starting at http://localhost:8000")
+    print("🚀 Custom Cloud Space Server starting at http://localhost:8001")
     uvicorn.run("storage_server:app", host="0.0.0.0", port=8001, reload=True)

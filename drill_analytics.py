@@ -493,6 +493,32 @@ def save_analysis_to_firestore(
 # HELPER FUNCTIONS
 # =====================================================================
 
+SCAN_YAW_THRESHOLD = 0.6   # |head yaw| above this counts as a clear "look behind"
+
+
+def head_yaw_from_keypoints(kpt):
+    """
+    Head-turn proxy from COCO pose keypoints (17 x [x, y, conf]).
+    Returns signed yaw in [-1, 1]: 0 = facing the camera, +/-1 = fully turned.
+    Computed from nose position relative to the ear midpoint, normalized
+    by ear span so it is scale-invariant to box size.
+    """
+    if kpt is None:
+        return 0.0
+    try:
+        nose_x = float(kpt[0][0])
+        left_ear_x = float(kpt[3][0])
+        right_ear_x = float(kpt[4][0])
+        ear_span = abs(left_ear_x - right_ear_x)
+        if ear_span < 1.0:
+            return 0.0
+        ear_mid_x = (left_ear_x + right_ear_x) / 2.0
+        yaw = (nose_x - ear_mid_x) / ear_span
+        return max(-1.0, min(1.0, yaw))
+    except (TypeError, ValueError, IndexError):
+        return 0.0
+
+
 def get_distance(p1, p2):
 
     if p1 is None or p2 is None:
@@ -814,6 +840,14 @@ def analyze_universal_drill(
 # =====================================================================
 # CORE DRILL ANALYZERS
 # =====================================================================
+
+def run_drill_analysis(drill, frame_data, group_id=None):
+    """Unified drill router: dispatches to the specialized dribbling
+    analyzer or the dynamic rules engine."""
+    if drill == "dribbling":
+        return analyze_dribbling(frame_data)
+    return analyze_universal_drill(frame_data, get_drill_config(drill))
+
 
 def analyze_dribbling(frame_data):
 

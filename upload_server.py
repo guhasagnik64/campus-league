@@ -103,15 +103,22 @@ def upload_file():
         drill_id = request.form.get('drill_id', 'dribble_pass')
         drill_type = request.form.get('drill_type', 'passing')
         player_name = request.form.get('player_name', 'Sagnik Guha')
+        tenant_id = request.form.get('tenant_id', 'default_facility')
+        facility_type = request.form.get('facility_type', 'ACADEMY')
         
-        save_path = os.path.join(BASE_DIR, file.filename)
+        # FIX: Save directly to VIDEO_DIR so the scouting engine can process it
+        save_path = os.path.join(VIDEO_DIR, file.filename)
         file.save(save_path)
         print(f"[SUCCESS] Intercepted video asset directly to: {save_path}")
         
+        # FIX: Invoke live_scouting_engine.py with the actual video path to compute real scores
         cmd = [
-            "python3", "generate_analytics.py", 
-            "default_facility", "ACADEMY", 
-            player_name, drill_id, drill_type, "High intensity precision passing"
+            "python3", "live_scouting_engine.py", 
+            "--video", save_path,
+            "--drill_name", drill_id,
+            "--drill_type", drill_type,
+            "--tenant_id", tenant_id,
+            "--facility_type", facility_type
         ]
         subprocess.Popen(cmd)
         
@@ -231,7 +238,7 @@ def get_public_leaderboard():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/v1/players//scorecard', methods=['GET'])
+@app.route('/api/v1/players/<path:player_id>/scorecard', methods=['GET'])
 def get_private_scorecard(player_id):
     """Fetches detailed player analytical feedback with robust fallback data."""
     try:
@@ -286,6 +293,7 @@ def get_private_scorecard(player_id):
         }), 200
 
 @app.route('/api/player-report/', methods=['GET'])
+@app.route('/api/player-report/<path:player_id>', methods=['GET'])
 def get_player_report(player_id="Sagnik Guha"):
     try:
         conn = sqlite3.connect("practice_intel.db")
@@ -293,8 +301,8 @@ def get_player_report(player_id="Sagnik Guha"):
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT entity_id, drill_type, technical_score, velocity_score, ovr_rating, suggestion 
-            FROM live_analytics 
+            SELECT entity_id, technical_score, velocity_score, ovr_rating, suggestion
+            FROM live_analytics
             WHERE entity_id = ?
             ORDER BY id DESC
             LIMIT 1
@@ -368,7 +376,7 @@ def upload_analysis_alias():
 # ==========================================
 # 4. LIVE POLLING, ADS, UPLOADS & FUTSAL BOOKING
 # ==========================================
-@app.route('/stream/', methods=['GET'])
+@app.route('/stream/<path:filename>', methods=['GET'])
 def serve_stream_file(filename):
     stream_dir = os.path.join(BASE_DIR, "stream")
     if os.path.exists(os.path.join(stream_dir, filename)):
@@ -487,7 +495,7 @@ def get_player_room_reports(player_id="Sagnik Guha"):
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT id, tenant_id, timestamp, entity_id, metric_event, velocity
+            SELECT id, tenant_id, timestamp, entity_id, metric_event, velocity_score
             FROM live_analytics
             WHERE entity_id = ?
         """, (player_id,))
@@ -509,4 +517,4 @@ def api_upload_query_alias():
     return upload_file()
 
 if __name__ == '__main__':
-    socketio.run(app, host="0.0.0.0", port=8000, debug=True, use_reloader=False)
+    socketio.run(app, host="0.0.0.0", port=8002, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)

@@ -104,7 +104,8 @@ export default function AnalyticsDashboard({ onAnalysisComplete, user, loggedInU
             speed: metrics.live_velocity || sprintAccel,
             accuracy: metrics.drill_analytics?.pass_accuracy || passAccuracy,
             orientation: metrics.drill_analytics?.orientation || 85,
-            confidence: metrics.reid_confidence || 0.94
+            confidence: metrics.reid_confidence || 0.94,
+            coachFeedback: metrics.coach_feedback || metrics.shortcomings || null
           });
         }
       }
@@ -286,32 +287,42 @@ export default function AnalyticsDashboard({ onAnalysisComplete, user, loggedInU
 
         {/* Dynamic Scorecard Panel */}
         <div className="md:col-span-2 p-4 bg-slate-900 text-white rounded-lg border border-slate-800 flex flex-col justify-between">
-          <div className="flex justify-between items-center mb-2">
-            <h4 className="font-bold text-yellow-400 text-base">
-              🎯 Dynamic Performance Scorecard: <span className="text-white">{selectedPlayerId}</span>
-            </h4>
-            <span className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded-full font-mono">
-              Re-ID Confidence: {playerScorecard ? `${(playerScorecard.confidence * 100).toFixed(0)}%` : '94%'}
-            </span>
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <h4 className="font-bold text-yellow-400 text-base">
+                🎯 Dynamic Performance Scorecard: <span className="text-white">{selectedPlayerId}</span>
+              </h4>
+              <span className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded-full font-mono">
+                Re-ID Confidence: {playerScorecard ? `${(playerScorecard.confidence * 100).toFixed(0)}%` : '94%'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2 text-center my-2">
+              <div className="bg-slate-800 p-2 rounded border border-slate-700">
+                <p className="text-[10px] text-slate-400 uppercase">OVR Score</p>
+                <p className="text-xl font-black text-yellow-400">{playerScorecard?.score ?? 82}</p>
+              </div>
+              <div className="bg-slate-800 p-2 rounded border border-slate-700">
+                <p className="text-[10px] text-slate-400 uppercase">Live Speed</p>
+                <p className="text-xl font-black text-cyan-400">{playerScorecard?.speed ?? sprintAccel} <span className="text-[10px]">km/h</span></p>
+              </div>
+              <div className="bg-slate-800 p-2 rounded border border-slate-700">
+                <p className="text-[10px] text-slate-400 uppercase">Pass Acc</p>
+                <p className="text-xl font-black text-emerald-400">{playerScorecard?.accuracy ?? passAccuracy}%</p>
+              </div>
+              <div className="bg-slate-800 p-2 rounded border border-slate-700">
+                <p className="text-[10px] text-slate-400 uppercase">Orientation</p>
+                <p className="text-xl font-black text-amber-400">{playerScorecard?.orientation ?? 85}%</p>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 text-center my-2">
-            <div className="bg-slate-800 p-2 rounded border border-slate-700">
-              <p className="text-[10px] text-slate-400 uppercase">OVR Score</p>
-              <p className="text-xl font-black text-yellow-400">{playerScorecard?.score ?? 82}</p>
-            </div>
-            <div className="bg-slate-800 p-2 rounded border border-slate-700">
-              <p className="text-[10px] text-slate-400 uppercase">Live Speed</p>
-              <p className="text-xl font-black text-cyan-400">{playerScorecard?.speed ?? sprintAccel} <span className="text-[10px]">km/h</span></p>
-            </div>
-            <div className="bg-slate-800 p-2 rounded border border-slate-700">
-              <p className="text-[10px] text-slate-400 uppercase">Pass Acc</p>
-              <p className="text-xl font-black text-emerald-400">{playerScorecard?.accuracy ?? passAccuracy}%</p>
-            </div>
-            <div className="bg-slate-800 p-2 rounded border border-slate-700">
-              <p className="text-[10px] text-slate-400 uppercase">Orientation</p>
-              <p className="text-xl font-black text-amber-400">{playerScorecard?.orientation ?? 85}%</p>
-            </div>
+          {/* Coach & AI Performance Critique Feedback Box */}
+          <div className="mt-3 p-3 bg-slate-800 rounded border border-slate-700 text-left">
+            <p className="text-xs font-semibold text-yellow-400 mb-1">Coach & AI Performance Critique:</p>
+            <p className="text-xs text-slate-300 italic">
+              {playerScorecard?.coachFeedback || "Maintained solid positioning, but needs tighter ball control during quick transitions."}
+            </p>
           </div>
         </div>
       </div>
