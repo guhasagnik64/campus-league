@@ -341,21 +341,30 @@ async def get_player_scorecard(player_id: str):
 # =====================================================================
 # FRONTEND STATIC FILES & SPA ROUTING FALLBACK
 # =====================================================================
-if os.path.exists("dist"):
-    app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DIST_DIR = os.path.join(BASE_DIR, "dist")
+
+if os.path.exists(DIST_DIR):
+    assets_dir = os.path.join(DIST_DIR, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
     @app.get("/")
     async def serve_root():
-        return FileResponse("dist/index.html")
+        return FileResponse(os.path.join(DIST_DIR, "index.html"))
 
     @app.get("/{full_path:path}")
     async def catch_all(full_path: str):
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="API endpoint not found")
-        file_path = os.path.join("dist", full_path)
+        file_path = os.path.join(DIST_DIR, full_path)
         if os.path.exists(file_path) and os.path.isfile(file_path):
             return FileResponse(file_path)
-        return FileResponse("dist/index.html")
+        return FileResponse(os.path.join(DIST_DIR, "index.html"))
+else:
+    @app.get("/")
+    async def serve_root_fallback():
+        return {"status": "Backend is running, but frontend 'dist' directory was not found during build."}
 
 if __name__ == "__main__":
     import uvicorn
