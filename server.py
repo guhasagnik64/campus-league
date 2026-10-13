@@ -6,6 +6,8 @@ import json
 import socketio
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from analytics_engine import process_drill_and_match_leaderboard
 
@@ -108,10 +110,6 @@ def reset_session_intake(player_id="SA"):
             print(f"🧹 [SESSION CLOSED] Successfully purged intake photo: {intake_path}")
         except Exception as e:
             print(f"⚠️ [PURGE ERROR] Could not remove intake photo: {e}")
-
-@app.get("/")
-def home():
-    return {"status": "Analytics Backend is running!"}
 
 # 1. Attire / Kit Profile Registration
 @app.post("/api/upload")
@@ -339,6 +337,25 @@ async def get_player_scorecard(player_id: str):
         "pass_accuracy": matched_player.get("pass_acc", "85%") if matched_player else "85%",
         "recent_drills": LEADERBOARD_CACHE[-5:] if LEADERBOARD_CACHE else []
     }
+
+# =====================================================================
+# FRONTEND STATIC FILES & SPA ROUTING FALLBACK
+# =====================================================================
+if os.path.exists("dist"):
+    app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+
+    @app.get("/")
+    async def serve_root():
+        return FileResponse("dist/index.html")
+
+    @app.get("/{full_path:path}")
+    async def catch_all(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+        file_path = os.path.join("dist", full_path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse("dist/index.html")
 
 if __name__ == "__main__":
     import uvicorn
