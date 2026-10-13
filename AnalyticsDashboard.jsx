@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import CoachPortfolioCV from './CoachPortfolioCV';
 
 // Fixed Port: Updated to 8000 to match live_scouting_engine.py
-const socket = io('http://localhost:8000');
+const socket = io('https://your-backend-service.onrender.com');
 
 // 1. Standalone Admin / Coach Multi-Player View Component
 export const GroupReportView = () => {
