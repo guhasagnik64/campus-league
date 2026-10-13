@@ -748,12 +748,13 @@ finally:
             }
 
             try:
-                res = requests.post("http://localhost:8000/api/process-drill-results", json=leaderboard_payload, timeout=30)
+                port = os.environ.get("PORT", "8000")
+                res = requests.post(f"http://127.0.0.1:{port}/api/process-drill-results", json=leaderboard_payload, timeout=30)
                 print(f"🏆 [LEADERBOARD AUTO-SYNC - {display_name}]: {res.json()}", flush=True)
             except Exception as single_sync_err:
                 print(f"⚠️ [LEADERBOARD SYNC WARNING - {display_name}]: {single_sync_err}", flush=True)
-    except Exception as sync_err:
-        print(f"⚠️ [LEADERBOARD SYNC WARNING] Failed pushing drill results to Express: {sync_err}", flush=True)
+            except Exception as sync_err:
+                print(f"⚠️ [LEADERBOARD SYNC WARNING] Failed pushing drill results to Express: {sync_err}", flush=True)
 
     # Trigger Post-Session Sync
     try:
