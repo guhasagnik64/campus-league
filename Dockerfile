@@ -11,12 +11,17 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies (FFmpeg and OpenCV libs for video analytics)
-RUN apt-get update && apt-get install -y \
+# Install system dependencies (FFmpeg and OpenCV/Ultralytics required libs)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsm6 \
     libxext6 \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip to ensure smooth installation of heavy packages (torch, ultralytics)
+RUN pip3 install --no-cache-dir --upgrade pip
 
 # Install Python backend dependencies
 COPY requirements.txt ./
