@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import CoachPortfolioCV from './CoachPortfolioCV';
 
-// Fixed Port: Updated to 8000 to match live_scouting_engine.py
+// Fixed Port: Updated to match backend URL
 const socket = io('https://campus-league-app.onrender.com');
 
 // 1. Standalone Admin / Coach Multi-Player View Component
@@ -10,7 +10,7 @@ export const GroupReportView = () => {
   const [reports, setReports] = useState({});
 
   useEffect(() => {
-    fetch('https://campus-league-app.onrender.com/api/admin/group_report')
+    fetchWithRetry('https://campus-league-app.onrender.com/api/admin/group_report')
       .then((res) => {
         if (!res.ok) {
           throw new Error(`HTTP status ${res.status}`);
@@ -142,7 +142,7 @@ export default function AnalyticsDashboard({ onAnalysisComplete, user, loggedInU
     formData.append('photo', uploadFile);
 
     try {
-      const res = await fetch('https://campus-league-app.onrender.com/api/players/register', {
+      const res = await fetchWithRetry('https://campus-league-app.onrender.com/api/players/register', {
         method: 'POST',
         body: formData,
       });
@@ -356,4 +356,18 @@ export default function AnalyticsDashboard({ onAnalysisComplete, user, loggedInU
       <GroupReportView />
     </div>
   );
+}
+
+// --- Cold Start 503 Auto-Retry Fetch Utility ---
+async function fetchWithRetry(url, options = {}, retries = 3) {
+  const response = await fetch(url, options);
+
+  if (response.status === 503 && retries > 0) {
+    const waitTime = parseInt(response.headers.get('retry-after') || '5') * 1000;
+    console.warn(`Service unavailable (cold start). Retrying in ${waitTime}ms...`);
+    await new Promise((resolve) => setTimeout(resolve, waitTime));
+    return fetchWithRetry(url, options, retries - 1);
+  }
+
+  return response;
 }
