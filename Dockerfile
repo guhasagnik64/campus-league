@@ -29,4 +29,4 @@ COPY server.py ./
 COPY --from=frontend-build /app/dist ./dist
 
 # Start FastAPI via Uvicorn on Render's assigned port
-CMD sh -c "uvicorn server:app_asgi --host 0.0.0.0 --port ${PORT:-10000}"
+CMD sh -c "python3 -m uvicorn server:app_asgi --host 0.0.0.0 --port ${PORT:-10000}"
