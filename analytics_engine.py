@@ -5,7 +5,7 @@ import argparse
 import json
 import numpy as np
 from datetime import datetime
-from ultralytics import YOLO
+# REMOVED: from ultralytics import YOLO from global scope to prevent server boot OOM crashes
 from drill_analytics import run_drill_analysis
 
 # --- 1. DRILL ZONE DEFINITIONS (Polygon Screen Coordinates) ---
@@ -20,8 +20,7 @@ SRC_PIXEL_PTS = np.float32([[10, 700], [850, 550], [900, 150], [50, 400]])
 DST_METER_PTS = np.float32([[0, 0], [15, 0], [15, 20], [0, 20]])
 HOMOGRAPHY_MATRIX, _ = cv2.findHomography(SRC_PIXEL_PTS, DST_METER_PTS)
 
-# Load YOLO model
-yolo_model = YOLO("yolov8n.pt")
+# Global YOLO instantiation removed from here.
 
 def get_real_world_coords(pixel_x, pixel_y):
     """Transforms video pixel coordinates into actual pitch metrics (meters)"""
@@ -148,6 +147,10 @@ def process_drill_and_match_leaderboard(
     group_id=None,
     drill_title="Simultaneous Multi-Group Telemetry"
 ):
+    # ✅ Lazy load YOLO locally to avoid loading PyTorch during server startup
+    from ultralytics import YOLO
+    yolo_model = YOLO("yolov8n.pt")
+
     cap = cv2.VideoCapture(video_path)
     registered_embeddings = build_registered_embeddings(registered_players_db)
     tracked_performance = {}
