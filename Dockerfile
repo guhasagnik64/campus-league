@@ -1,9 +1,11 @@
-FROM node:20-slim
+FROM python:3.10-slim
 
-# Install Python & system dependencies for OpenCV / FFmpeg
+# Install system dependencies (Python, Node.js for frontend build, FFmpeg for analytics)
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
+    nodejs \
+    npm \
     ffmpeg \
     libsm6 \
     libxext6 \
@@ -11,20 +13,19 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Install Node dependencies
+# Copy package files and install frontend dependencies
 COPY package*.json ./
 RUN npm install
 
-# Install Python dependencies safely
+# Copy Python requirements and install backend dependencies
 COPY requirements.txt ./
-RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt || true
+RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy source code
+# Copy all project source code
 COPY . .
 
-# Build the Vite frontend static bundle into the 'dist' folder
+# Build the React frontend into the 'dist' folder
 RUN npm run build
 
-EXPOSE 10000
-
-CMD ["node", "server.js"]
+# FORCE Uvicorn to run FastAPI (bypassing any Node/Express scripts)
+CMD sh -c "uvicorn server:app_asgi --host 0.0.0.0 --port ${PORT:-10000}"
