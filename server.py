@@ -344,27 +344,31 @@ async def get_player_scorecard(player_id: str):
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DIST_DIR = os.path.join(BASE_DIR, "dist")
 
-if os.path.exists(DIST_DIR):
-    assets_dir = os.path.join(DIST_DIR, "assets")
-    if os.path.exists(assets_dir):
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+assets_dir = os.path.join(DIST_DIR, "assets")
+if os.path.exists(assets_dir):
+    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-    @app.get("/")
-    async def serve_root():
-        return FileResponse(os.path.join(DIST_DIR, "index.html"))
+@app.get("/")
+async def serve_root():
+    index_path = os.path.join(DIST_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"status": "Backend is running, but frontend build (dist/index.html) was not found."}
 
-    @app.get("/{full_path:path}")
-    async def catch_all(full_path: str):
-        if full_path.startswith("api/"):
-            raise HTTPException(status_code=404, detail="API endpoint not found")
-        file_path = os.path.join(DIST_DIR, full_path)
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(DIST_DIR, "index.html"))
-else:
-    @app.get("/")
-    async def serve_root_fallback():
-        return {"status": "Backend is running, but frontend 'dist' directory was not found during build."}
+@app.get("/{full_path:path}")
+async def catch_all(full_path: str):
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+    
+    file_path = os.path.join(DIST_DIR, full_path)
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        return FileResponse(file_path)
+    
+    index_path = os.path.join(DIST_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+        
+    return {"status": "Frontend build not found"}
 
 if __name__ == "__main__":
     import uvicorn
