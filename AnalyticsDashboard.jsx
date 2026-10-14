@@ -360,14 +360,23 @@ export default function AnalyticsDashboard({ onAnalysisComplete, user, loggedInU
 
 // --- Cold Start 503 Auto-Retry Fetch Utility ---
 async function fetchWithRetry(url, options = {}, retries = 3) {
-  const response = await fetch(url, options);
+  try {
+    const response = await fetch(url, options);
 
-  if (response.status === 503 && retries > 0) {
-    const waitTime = parseInt(response.headers.get('retry-after') || '5') * 1000;
-    console.warn(`Service unavailable (cold start). Retrying in ${waitTime}ms...`);
-    await new Promise((resolve) => setTimeout(resolve, waitTime));
-    return fetchWithRetry(url, options, retries - 1);
+    if (response.status === 503 && retries > 0) {
+      // Parse 'Retry-After' header (seconds) or fallback to 5 seconds
+      const rawDelay = response.headers.get('Retry-After');
+      const retryDelay = rawDelay ? parseInt(rawDelay, 10) * 1000 : 5000;
+
+      console.warn(`Service 503 unavailable (Cold Start). Retrying in ${retryDelay}ms... (${retries} retries left)`);
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+
+      return fetchWithRetry(url, options, retries - 1);
+    }
+
+    return response;
+  } catch (error) {
+    console.error("Request failed during retry fetch:", error);
+    throw error;
   }
-
-  return response;
 }
