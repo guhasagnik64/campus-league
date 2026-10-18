@@ -7,3 +7,4 @@ requests
 python-dotenv
 numpy
 ultralytics
+firebase-admin
