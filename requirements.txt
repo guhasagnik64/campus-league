@@ -1,3 +1,7 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+ultralytics
 fastapi
 uvicorn
 python-socketio
@@ -6,5 +10,4 @@ pandas
 requests
 python-dotenv
 numpy
-ultralytics
 firebase-admin
