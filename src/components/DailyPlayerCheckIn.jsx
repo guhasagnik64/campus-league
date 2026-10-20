@@ -56,6 +56,11 @@ export default function DailyPlayerCheckIn({ currentUser }) {
 
   // 1. Fetch user-specific reports dynamically on mount / ID change
   useEffect(() => {
+    // Reset player-specific intake photo/preview state on ID change to prevent data leaks
+    setCapturedImage(null);
+    localStorage.removeItem("active_intake_photo");
+    sessionStorage.removeItem("active_intake_photo");
+
     const fetchTelemetryReports = async () => {
       setLoadingReports(true);
       setError('');
@@ -81,7 +86,7 @@ export default function DailyPlayerCheckIn({ currentUser }) {
     };
     if (playerId) fetchTelemetryReports();
   }, [playerId]);
-
+  
   // 1.5 Fetch dynamic active squads from backend on mount
   useEffect(() => {
     const fetchSquads = async () => {
@@ -194,6 +199,11 @@ export default function DailyPlayerCheckIn({ currentUser }) {
 
       if (response.ok && data.success) {
         setCheckInStatus(`✅ Pre-drill check-in complete! Re-ID feature vectors registered for ${playerName}.`);
+        
+        // Clear intake photo preview & cached memory on successful submission
+        setCapturedImage(null);
+        localStorage.removeItem("active_intake_photo");
+        sessionStorage.removeItem("active_intake_photo");
       } else {
         setCheckInStatus(`⚠️ Check-in error: ${data.message || 'Registration failed'}`);
       }

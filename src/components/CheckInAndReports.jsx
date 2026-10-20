@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
+import DailyPlayerCheckIn from './DailyPlayerCheckIn';
 
 export default function CheckInAndReports({ currentUser }) {
   // Determine role (e.g., "admin" vs "player")
   const isAdmin = currentUser?.role === 'admin' || currentUser?.title?.includes('Admin');
+
+  // Key tracking identifier to force clean remount on player changes
+  const activePlayerKey = currentUser?.id || localStorage.getItem('activePlayerId') || 'Tracked_Arin';
 
   return (
     <div style={{ padding: '20px' }}>
@@ -39,31 +43,10 @@ export default function CheckInAndReports({ currentUser }) {
       ) : (
         /* ================= PLAYER VIEW ================= */
         <div className="player-precheck-panel" style={styles.card}>
-          <h3>👤 Daily Player Tracking Pre-Check</h3>
-          <p style={{ fontSize: '12px', color: '#64748b' }}>
-            Players: Verify your profile identity, assigned tracking color, and biometric face references prior to kickoff.
-          </p>
-
-          <form style={{ display: 'grid', gap: '15px', marginTop: '15px' }}>
-            <div>
-              <label style={styles.label}>Player Registered Name</label>
-              <input type="text" placeholder="e.g., Sagnik Guha" style={styles.input} />
-            </div>
-            <div>
-              <label style={styles.label}>Today's Kit / Training Bib Color</label>
-              <select style={styles.input}>
-                <option>Black Kit / Dark Bib</option>
-                <option>Red Kit / Light Bib</option>
-              </select>
-            </div>
-            <div>
-              <label style={styles.label}>Upload Daily Face Capture</label>
-              <input type="file" />
-            </div>
-            <button type="submit" style={styles.submitBtn}>
-              Commit Registration to Active Stream
-            </button>
-          </form>
+          <DailyPlayerCheckIn 
+            key={activePlayerKey} 
+            currentUser={currentUser} 
+          />
         </div>
       )}
     </div>

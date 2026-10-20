@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import DailyPlayerCheckIn from './DailyPlayerCheckIn';
 
 export default function AdminConsole({ selectedPlayerId = 'PLAYER_1', onPlayerRatingUpdated }) {
   const [drillName, setDrillName] = useState('Tactical Rondo Grid');
@@ -182,7 +183,7 @@ export default function AdminConsole({ selectedPlayerId = 'PLAYER_1', onPlayerRa
             >
               <option value="Tactical Rondo Grid">Tactical Rondo Grid</option>
               <option value="3-Player Passing Rotation">3-Player Passing Rotation</option>
-              <option value="Dribbling">1. Dribbling Drill</option>
+              <option value="Dribbling">Dribbling Drill</option>
               <option value="Pass and Support">2. Pass and Support</option>
               <option value="Pass and Move">3. Pass and Move</option>
               <option value="SAQ (Speed Agility Quickness)">4. SAQ (Speed Agility Quickness)</option>
@@ -320,6 +321,14 @@ export default function AdminConsole({ selectedPlayerId = 'PLAYER_1', onPlayerRa
           )}
         </div>
       )}
+
+      {/* PLAYER CHECK-IN & INTAKE OVERRIDE TERMINAL */}
+      <div style={{ marginTop: '2rem', borderTop: '1px solid #374151', paddingTop: '1rem' }}>
+        <DailyPlayerCheckIn 
+          key={selectedPlayerId} 
+          currentUser={{ id: selectedPlayerId }} 
+        />
+      </div>
     </div>
   );
 }
