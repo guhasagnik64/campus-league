@@ -111,10 +111,42 @@ def get_target_video():
     print(f"[ALERT] No custom videos found. Falling back to: {default_video}")
     return default_video
 
+def optimize_long_video(input_path: str) -> str:
+    """
+    Automatically scales down long videos (up to 30-40 mins) to 720p, 
+    caps them at 15 FPS, and strips audio to prevent Render timeouts and OOM crashes.
+    """
+    if not os.path.exists(input_path) or os.path.getsize(input_path) == 0:
+        return input_path
+        
+    optimized_path = os.path.join(TENANT_DIR, f"optimized_{os.path.basename(input_path)}")
+    
+    print(f"[FFMPEG OPTIMIZER] Pre-processing video for seamless AI analysis: {input_path}")
+    ffmpeg_cmd = [
+        "ffmpeg", "-y",
+        "-i", input_path,
+        "-vf", "scale=-1:720,fps=15",
+        "-c:v", "libx264",
+        "-crf", "28",
+        "-an",
+        optimized_path
+    ]
+    
+    try:
+        subprocess.run(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        print(f"✅ Video optimized successfully: {optimized_path}")
+        return optimized_path
+    except Exception as e:
+        print(f"⚠️ FFmpeg optimization fallback (using raw source): {e}")
+        return input_path
+
 video_source = get_target_video()
 if not os.path.exists(video_source):
     os.makedirs(os.path.dirname(video_source), exist_ok=True)
     open(video_source, 'a').close()
+
+# 🚀 Automatically optimize long videos before CV processing pipeline starts
+video_source = optimize_long_video(video_source)
 
 temp_full_output = os.path.join(TENANT_DIR, f"temp_processed_{os.path.basename(video_source)}")
 final_clip_output = os.path.join(TENANT_DIR, f"micro_clip_{os.path.basename(video_source)}")
@@ -187,7 +219,7 @@ def evaluate_drill_performance(drill_type, velocity, precision_score):
     return min(99, max(50, ovr))
 
 cap = cv2.VideoCapture(video_source)
-fps = cap.get(cv2.CAP_PROP_FPS) if cap.get(cv2.CAP_PROP_FPS) > 0 else 30
+fps = cap.get(cv2.CAP_PROP_FPS) if cap.get(cv2.CAP_PROP_FPS) > 0 else 15
 width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) if cap.get(cv2.CAP_PROP_FRAME_WIDTH) > 0 else 1280
 height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) if cap.get(cv2.CAP_PROP_FRAME_HEIGHT) > 0 else 720
 
