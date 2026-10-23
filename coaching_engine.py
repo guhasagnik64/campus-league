@@ -110,7 +110,39 @@ def get_target_video():
     default_video = os.path.join(cloud_directory, "rough_game1.mp4")
     print(f"[ALERT] No custom videos found. Falling back to: {default_video}")
     return default_video
+def chunk_long_video(input_path: str, chunk_duration_sec: int = 600) -> list:
+    """
+    Splits long training/match videos (e.g., 2-3 hours) into optimal 
+    10-minute segments (600s) to prevent memory crashes during AI analysis.
+    """
+    if not os.path.exists(input_path) or os.path.getsize(input_path) == 0:
+        return [input_path]
 
+    output_path_dir = os.path.dirname(input_path)
+    output_pattern = os.path.join(output_path_dir, "chunk_%03d.mp4")
+    print(f"[FFMPEG CHUNKER] Splitting video into {chunk_duration_sec // 60}-minute optimal segments...")
+
+    chunk_cmd = [
+        "ffmpeg", "-y",
+        "-i", input_path,
+        "-c", "copy",
+        "-f", "segment",
+        "-segment_time", str(chunk_duration_sec),
+        "-reset_timestamps", "1",
+        output_pattern
+    ]
+
+    try:
+        subprocess.run(chunk_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        chunks = sorted([
+            os.path.join(output_path_dir, f) for f in os.listdir(output_path_dir)
+            if f.startswith("chunk_") and f.endswith(".mp4")
+        ])
+        print(f"✅ Created {len(chunks)} processing segments.")
+        return chunks if chunks else [input_path]
+    except Exception as e:
+        print(f"⚠️ Chunking fallback (processing full file): {e}")
+        return [input_path]
 def optimize_long_video(input_path: str) -> str:
     """
     Automatically scales down long videos (up to 30-40 mins) to 720p, 
@@ -145,13 +177,87 @@ if not os.path.exists(video_source):
     os.makedirs(os.path.dirname(video_source), exist_ok=True)
     open(video_source, 'a').close()
 
-# 🚀 Automatically optimize long videos before CV processing pipeline starts
-video_source = optimize_long_video(video_source)
+# 🚀 Automatically chunk long videos (2-3+ hours) into 10-minute segments
+video_chunks = chunk_long_video(video_source, chunk_duration_sec=600)
 
-temp_full_output = os.path.join(TENANT_DIR, f"temp_processed_{os.path.basename(video_source)}")
+intel_logs = []
 final_clip_output = os.path.join(TENANT_DIR, f"micro_clip_{os.path.basename(video_source)}")
 
 db_conn = init_db()
+
+# Loop through each chunk sequentially so multi-hour videos process smoothly
+for chunk_idx, current_chunk_path in enumerate(video_chunks):
+    print(f"\n[CHUNK PIPELINE] Processing segment {chunk_idx + 1} of {len(video_chunks)}: {current_chunk_path}")
+    
+    optimized_chunk_source = optimize_long_video(current_chunk_path)
+    temp_full_output = os.path.join(TENANT_DIR, f"temp_processed_chunk_{chunk_idx}_{os.path.basename(video_source)}")
+
+    cap = cv2.VideoCapture(optimized_chunk_source)
+    fps = cap.get(cv2.CAP_PROP_FPS) if cap.get(cv2.CAP_PROP_FPS) > 0 else 15
+    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) if cap.get(cv2.CAP_PROP_FRAME_WIDTH) > 0 else 1280
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) if cap.get(cv2.CAP_PROP_FRAME_HEIGHT) > 0 else 720
+
+    if width > 1280:
+        width, height = 1280, 720
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out_writer = cv2.VideoWriter(temp_full_output, fourcc, fps, (width, height))
+
+    frame_idx = 0
+    track_ids = [1, 2, 3]
+    boxes = [[200, 300, 260, 420], [450, 310, 510, 430], [800, 280, 860, 400]]
+    simulated_velocities = [27.4, 23.8, 20.1]
+    simulated_precisions = [90, 82, 75]
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret or frame is None:
+            break
+
+        frame_idx += 1
+        curr_time_sec = frame_idx / fps
+        timestamp_str = str(timedelta(seconds=curr_time_sec))
+
+        for idx, tid in enumerate(track_ids):
+            p_box = boxes[idx]
+            xmin, ymin, xmax, ymax = p_box
+
+            head_ymax = max(0, int(ymin + (ymax - ymin) * 0.35))
+            face_crop = frame[max(0, ymin):head_ymax, max(0, xmin):max(0, xmax)]
+
+            resolved_name, is_reg = match_visual_embedding(tid, face_crop)
+
+            if face_crop.size > 0:
+                crop_name = f"tracked_player_{tid}.jpg"
+                cv2.imwrite(os.path.join(TENANT_DIR, crop_name), face_crop)
+                cv2.imwrite(os.path.join("public", crop_name), face_crop)
+
+            v_speed = simulated_velocities[idx]
+            p_precision = simulated_precisions[idx]
+            technical_ovr = evaluate_drill_performance(drill_name, v_speed, p_precision)
+
+            player_label = f"{resolved_name} ({technical_ovr} OVR)"
+            cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
+            cv2.putText(frame, player_label, (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+            intel_logs.append({
+                "Timestamp": timestamp_str,
+                "Player_ID": resolved_name,
+                "Track_ID": tid,
+                "Technical_Score": technical_ovr,
+                "Velocity_Score": v_speed,
+                "Remark": f"{drill_name.upper()}_PERFORMANCE",
+                "Suggested_Fix": f"Evaluated under criteria matrix: {drill_name.upper()}."
+            })
+
+        out_writer.write(frame)
+
+    cap.release()
+    out_writer.release()
+    cv2.destroyAllWindows()
+    
+    if os.path.exists(optimized_chunk_source) and optimized_chunk_source != current_chunk_path:
+        os.remove(optimized_chunk_source)
 
 # ==========================================
 # Dynamic Avatar & Profile Resolver Logic
