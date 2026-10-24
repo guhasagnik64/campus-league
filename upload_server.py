@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from flask import send_from_directory
+from datetime import datetime
 import os
 import subprocess
 import sqlite3
@@ -233,7 +234,10 @@ def get_public_leaderboard():
                 "goals": row["goals"] or 1
             })
 
-        return jsonify({"rankings": public_data}), 200
+        return jsonify({
+            "rankings": public_data,
+            "session_date": datetime.now().strftime("%B %d, %Y")  # <--- Add this line!
+        }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -517,4 +521,4 @@ def api_upload_query_alias():
     return upload_file()
 
 if __name__ == '__main__':
-    socketio.run(app, host="0.0.0.0", port=8002, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host="0.0.0.0", port=8000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
