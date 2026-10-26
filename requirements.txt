@@ -1,12 +1,13 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 flask
 flask-cors
+flask-socketio
+python-socketio
 torch
 torchvision
 ultralytics
 fastapi
 uvicorn
-python-socketio
 opencv-python
 pandas
 requests
