@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
-const API_BASE_URL = 'https://campus-league-app.onrender.com';
+const API_BASE_URL = "https://campus-league-7sfl.onrender.com";
 
 export default function DailyPlayerCheckIn({ currentUser }) {
   const { playerId: routePlayerId } = useParams();

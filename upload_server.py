@@ -91,8 +91,10 @@ init_server_db()
 # ==========================================
 # 1. UPLOADER & ANALYSIS ENDPOINTS
 # ==========================================
-@app.route('/upload', methods=['POST'])
+@app.route('/upload', methods=['POST', 'OPTIONS'])
 def upload_file():
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
@@ -128,12 +130,16 @@ def upload_file():
         print(f"[ERROR] Exception during video upload: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/upload', methods=['POST'])
+@app.route('/api/upload', methods=['POST', 'OPTIONS'])
 def api_upload_alias():
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
     return upload_file()
 
-@app.route('/api/upload-drill', methods=['POST'])
+@app.route('/api/upload-drill', methods=['POST', 'OPTIONS'])
 def upload_drill_api():
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
     return upload_file()
 
 @app.route('/api/admin/analyze', methods=['POST'])
@@ -209,8 +215,10 @@ def publish_report():
 # ==========================================
 # 3. CAMPUS LEAGUE PUBLIC & PRIVATE ROUTES
 # ==========================================
-@app.route('/api/v1/league/leaderboard', methods=['GET'])
+@app.route('/api/v1/league/leaderboard', methods=['GET', 'OPTIONS'])
 def get_public_leaderboard():
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
     try:
         conn = sqlite3.connect("practice_intel.db")
         conn.row_factory = sqlite3.Row
@@ -236,7 +244,7 @@ def get_public_leaderboard():
 
         return jsonify({
             "rankings": public_data,
-            "session_date": datetime.now().strftime("%B %d, %Y")  # <--- Add this line!
+            "session_date": datetime.now().strftime("%B %d, %Y")
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -516,8 +524,10 @@ def get_player_room_reports(player_id="Sagnik Guha"):
 # ==========================================
 # FIX: UPLOAD QUERY ALIAS ROUTE
 # ==========================================
-@app.route('/api/upload', methods=['POST', 'GET'])
+@app.route('/api/upload', methods=['POST', 'GET', 'OPTIONS'])
 def api_upload_query_alias():
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
     return upload_file()
 
 if __name__ == '__main__':
