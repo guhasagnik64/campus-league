@@ -360,12 +360,14 @@ export default function GlobalCampusLeaderboard({
             session.drill_name ||
             "";
 
+          const normalizedSessionDrill = String(sessionDrillName).toLowerCase().replace(/[_-\s]/g, "");
+          const normalizedSelectedDrill = String(selectedDrillType).toLowerCase().replace(/[_-\s]/g, "");
+
           const matchesDrillFilter =
             selectedDrillType === "all" ||
-            sessionDrillName ===
-              selectedDrillType ||
-            sessionDrillId ===
-              selectedDrillType;
+            normalizedSessionDrill === normalizedSelectedDrill ||
+            normalizedSessionDrill.includes(normalizedSelectedDrill) ||
+            normalizedSelectedDrill.includes(normalizedSessionDrill);
 
           if (!matchesDrillFilter) {
             return null;
@@ -380,10 +382,13 @@ export default function GlobalCampusLeaderboard({
                 player.squad ||
                 "default_group";
 
+              const normalizedPlayerGroup = String(playerGroup).toLowerCase().replace(/[_-\s]/g, "");
+              const normalizedSelectedGroup = String(selectedGroup).toLowerCase().replace(/[_-\s]/g, "");
+
               const matchesGroup =
                 activeTab === "global" ||
-                playerGroup ===
-                  selectedGroup;
+                normalizedPlayerGroup === normalizedSelectedGroup ||
+                normalizedPlayerGroup.includes(normalizedSelectedGroup);
 
               const playerName =
                 player.player_name ||
