@@ -109,19 +109,20 @@ def upload_file():
         tenant_id = request.form.get('tenant_id', 'default_facility')
         facility_type = request.form.get('facility_type', 'ACADEMY')
         
-        # FIX: Save directly to VIDEO_DIR so the scouting engine can process it
+        # Save directly to VIDEO_DIR so the scouting engine can process it
         save_path = os.path.join(VIDEO_DIR, file.filename)
         file.save(save_path)
         print(f"[SUCCESS] Intercepted video asset directly to: {save_path}")
         
-        # FIX: Invoke live_scouting_engine.py with the actual video path to compute real scores
+        # FIX: Include player_name as entity_id so results link to the correct profile
         cmd = [
             "python3", "live_scouting_engine.py", 
             "--video", save_path,
             "--drill_name", drill_id,
             "--drill_type", drill_type,
             "--tenant_id", tenant_id,
-            "--facility_type", facility_type
+            "--facility_type", facility_type,
+            "--entity_id", player_name
         ]
         subprocess.Popen(cmd)
         
