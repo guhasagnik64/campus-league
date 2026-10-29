@@ -754,8 +754,8 @@ finally:
                 print(f"🏆 [LEADERBOARD AUTO-SYNC - {display_name}]: {res.json()}", flush=True)
             except Exception as single_sync_err:
                 print(f"⚠️ [LEADERBOARD SYNC WARNING - {display_name}]: {single_sync_err}", flush=True)
-            except Exception as sync_err:
-                print(f"⚠️ [LEADERBOARD SYNC WARNING] Failed pushing drill results to Express: {sync_err}", flush=True)
+    except Exception as sync_err:
+        print(f"⚠️ [LEADERBOARD SYNC WARNING] Failed pushing drill results to Express: {sync_err}", flush=True)
 
     # Trigger Post-Session Sync
     try:
@@ -764,16 +764,14 @@ finally:
     except Exception as e:
         print(f"⚠️ [SYNC WARNING] Failed to trigger cloud_sync.py: {e}", flush=True)
 
-   # Clean Up Processed Drill Videos Only (Preserve Intake/Calibration Images)
+    # Clean Up Processed Drill Videos Only (Preserve Intake/Calibration Images)
     if session_mode in ["CASUAL_FUTSAL", "FUTSAL_GROUND"] and source_path != 0:
         print("🗑️ [STORAGE PURGE] Executing selective video cleanup (preserving intake memory)...", flush=True)
         try:
             if os.path.exists(str(source_path)) and not ("Known_players" in str(source_path) or "intake_cache" in str(source_path)):
                 os.remove(str(source_path))
-            
             if os.path.exists(output_video_path):
                 os.remove(output_video_path)
-                
         except Exception as clean_err:
             print(f"[STORAGE WARNING] Auto-cleanup failed: {clean_err}", flush=True)
 
