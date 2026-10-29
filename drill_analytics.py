@@ -1101,7 +1101,8 @@ def build_player_history(frame_data):
                 "position": position,
                 "speed": player.get("speed"),
                 "acceleration": player.get("acceleration"),
-                "body_orientation": player.get("body_orientation")
+                "body_orientation": player.get("body_orientation"),
+                "scanning_performed": player.get("scanning_performed", False)
             })
 
     return history
@@ -1173,11 +1174,65 @@ def assign_stable_groups(player_history, group_size=3, max_group_distance=450.0,
     return groups
 
 
+def evaluate_tactical_movements(player_history_frames):
+    """
+    Evaluates coach & admin tactical criteria:
+    - Scanning & Shoulder Checks (head checks before receiving)
+    - Pre-reception movement sequence (moving forward then dropping back / deception)
+    """
+    deception_moves = 0
+    scanning_checks = 0
+    
+    if not player_history_frames or len(player_history_frames) < 5:
+        return {
+            "scanning_score": 75.0,
+            "deception_score": 75.0,
+            "feedback": ["⚠️ Insufficient movement data for full tactical audit"]
+        }
+
+    positions = [f.get("position", [0, 0]) for f in player_history_frames]
+    
+    # Check for pre-reception movement sequence: stepping forward then dropping back (unmarking deception)
+    for i in range(2, len(positions) - 2):
+        prev_y = positions[i-2][1]
+        mid_y = positions[i][1]
+        curr_y = positions[i+2][1]
+        
+        if mid_y < prev_y and curr_y > mid_y:
+            deception_moves += 1
+
+    for frame in player_history_frames:
+        if frame.get("scanning_performed", False):
+            scanning_checks += 1
+
+    feedback = []
+    
+    if deception_moves > 0:
+        feedback.append("✨ Excellent unmarking deception (moved forward then dropped back to receive)")
+        deception_score = 95.0
+    else:
+        feedback.append("⚠️ Tip: Move forward briefly to fool the defender before dropping back to receive")
+        deception_score = 70.0
+
+    if scanning_checks > 0:
+        feedback.append("👀 Good active scanning & shoulder checks performed")
+        scanning_score = 90.0
+    else:
+        feedback.append("⚠️ Reminder: Check your shoulders and scan the field before receiving the ball")
+        scanning_score = 72.0
+
+    return {
+        "scanning_score": float(scanning_score),
+        "deception_score": float(deception_score),
+        "feedback": feedback
+    }
+
+
 def analyze_pass_support_group(group_id, player_ids, frame_data):
     if len(player_ids) != 3:
         return {"group_id": group_id, "status": "Invalid group size", "players": []}
 
-    player_metrics = {str(pid): {"passes_attempted": 0, "passes_completed": 0, "receptions": 0, "speed_values": [], "acceleration_values": [], "reception_orientation": []} for pid in player_ids}
+    player_metrics = {str(pid): {"passes_attempted": 0, "passes_completed": 0, "receptions": 0, "speed_values": [], "acceleration_values": [], "reception_orientation": [], "history": []} for pid in player_ids}
     group_events = []
 
     for frame in frame_data:
@@ -1201,6 +1256,12 @@ def analyze_pass_support_group(group_id, player_ids, frame_data):
                 metrics["acceleration_values"].append(float(player["acceleration"]))
             if player.get("body_orientation") is not None:
                 metrics["reception_orientation"].append(float(player["body_orientation"]))
+            
+            pos = player.get("foot") or player.get("position") or [0, 0]
+            metrics["history"].append({
+                "position": pos,
+                "scanning_performed": player.get("scanning_performed", False)
+            })
 
         pass_event = frame.get("pass_event")
         if pass_event:
@@ -1223,7 +1284,20 @@ def analyze_pass_support_group(group_id, player_ids, frame_data):
         peak_acceleration = max(metrics["acceleration_values"]) if metrics["acceleration_values"] else 2.5
         sprint_acceleration_rate = min(100.0, max(0.0, (peak_acceleration / 3.5) * 100.0))
 
-        individual_score = int(round((passing_accuracy * 0.40) + (reception_orientation * 0.30) + (sprint_acceleration_rate * 0.30)))
+        tactical_eval = evaluate_tactical_movements(metrics["history"])
+
+        individual_score = int(round(
+            (passing_accuracy * 0.25) + 
+            (reception_orientation * 0.20) + 
+            (sprint_acceleration_rate * 0.20) + 
+            (tactical_eval["scanning_score"] * 0.15) + 
+            (tactical_eval["deception_score"] * 0.20)
+        ))
+
+        combined_feedback = tactical_eval["feedback"]
+        if passing_accuracy >= 80:
+            combined_feedback.append("🎯 Clean, accurate first touch and passing delivery")
+
         individual_results.append({
             "player_id": str(player_id),
             "groupId": str(group_id),
@@ -1231,6 +1305,9 @@ def analyze_pass_support_group(group_id, player_ids, frame_data):
             "passing_accuracy": round(passing_accuracy, 2),
             "reception_orientation": round(reception_orientation, 2),
             "sprint_acceleration_rate": round(sprint_acceleration_rate, 2),
+            "scanning_score": tactical_eval["scanning_score"],
+            "deception_score": tactical_eval["deception_score"],
+            "coach_feedback": combined_feedback,
             "score": max(0, min(100, individual_score))
         })
 
@@ -1244,7 +1321,6 @@ def analyze_pass_support_group(group_id, player_ids, frame_data):
         "total_passes": len(group_events),
         "status": "Completed"
     }
-
 
 def analyze_all_pass_support_groups(frame_data, group_size=3):
     if not isinstance(frame_data, list):
