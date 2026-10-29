@@ -540,9 +540,10 @@ try:
                         "x": int(cx),
                         "y": int(cy),
                         "foot": [int(cx), int(y2)],
-                        "body_orientation": 45.0,
+                        "body_orientation": 85.0 if look_behind_now else 70.0,
                         "speed": float(speed_kmh),
-                        "acceleration": float(speed_kmh * 0.3)
+                        "acceleration": float(speed_kmh * 0.3),
+                        "scanning_performed": look_behind_now
                     })
 
                     # Dynamic Drill Analytics Selection
