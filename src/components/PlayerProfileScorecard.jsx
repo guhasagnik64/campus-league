@@ -16,7 +16,8 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 
-const SOCKET_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://campus-league-7sf1.onrender.com';
+const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://campus-league-7sf1.onrender.com';
+const SOCKET_URL = API_BASE_URL;
 
 /**
  * Convert a Firestore Timestamp or normal date value
