@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 
-// Fixed Socket Connection to Express Gateway
-const socket = io('http://localhost:8000');
+// Dynamic API & Socket URL based on environment
+const API_BASE_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:8000' 
+  : 'https://campus-league-7sf1.onrender.com';
+
+const socket = io(API_BASE_URL);
 
 export default function CoachDrillPlanner({ currentUser }) {
   const [students, setStudents] = useState([]);
