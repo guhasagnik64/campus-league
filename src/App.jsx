@@ -3,7 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 
-const socket = io('http://127.0.0.1:8000', {
+const API_BASE_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:8000' 
+  : 'https://campus-league-7sf1.onrender.com';
+
+const socket = io(API_BASE_URL, {
   transports: ['websocket', 'polling']
 });
 
