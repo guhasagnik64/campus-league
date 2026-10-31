@@ -41,7 +41,34 @@
         }
     ],
     "individualPortals": {
-        "Player_127": {
+        "Player_95": {
+            "metadata": {
+                "topSpeed": "9.5 km/h",
+                "finalScore": 77.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 9.5 km/h | Competitive Index: 14.2"
+        },
+        "Player_94": {
+            "metadata": {
+                "topSpeed": "6.7 km/h",
+                "finalScore": 75.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 6.7 km/h | Competitive Index: 10.1"
+        },
+        "Player_93": {
+            "metadata": {
+                "topSpeed": "15.5 km/h",
+                "finalScore": 84.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 15.5 km/h | Competitive Index: 33.2"
+        },
+        "Player_92": {
             "metadata": {
                 "topSpeed": "0.0 km/h",
                 "finalScore": 70.0,
@@ -50,7 +77,52 @@
             },
             "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 0.0 km/h | Competitive Index: 0.0"
         },
-        "Player_125": {
+        "Player_91": {
+            "metadata": {
+                "topSpeed": "7.7 km/h",
+                "finalScore": 76.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 7.7 km/h | Competitive Index: 11.6"
+        },
+        "Player_89": {
+            "metadata": {
+                "topSpeed": "5.6 km/h",
+                "finalScore": 74.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 5.6 km/h | Competitive Index: 8.4"
+        },
+        "Player_88": {
+            "metadata": {
+                "topSpeed": "9.9 km/h",
+                "finalScore": 77.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 9.9 km/h | Competitive Index: 14.9"
+        },
+        "Player_83": {
+            "metadata": {
+                "topSpeed": "4.9 km/h",
+                "finalScore": 73.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 4.9 km/h | Competitive Index: 7.4"
+        },
+        "Player_82": {
+            "metadata": {
+                "topSpeed": "7.0 km/h",
+                "finalScore": 75.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 7.0 km/h | Competitive Index: 10.5"
+        },
+        "Player_81": {
             "metadata": {
                 "topSpeed": "36.0 km/h",
                 "finalScore": 99.0,
@@ -58,84 +130,12 @@
                 "position": "Futsal Player"
             },
             "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 36.0 km/h | Competitive Index: 64.0"
-        },
-        "Player_124": {
-            "metadata": {
-                "topSpeed": "5.1 km/h",
-                "finalScore": 74.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 5.1 km/h | Competitive Index: 7.6"
-        },
-        "Player_123": {
-            "metadata": {
-                "topSpeed": "8.6 km/h",
-                "finalScore": 76.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 8.6 km/h | Competitive Index: 12.9"
-        },
-        "Player_122": {
-            "metadata": {
-                "topSpeed": "15.5 km/h",
-                "finalScore": 88.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 15.5 km/h | Competitive Index: 53.2"
-        },
-        "Player_121": {
-            "metadata": {
-                "topSpeed": "10.2 km/h",
-                "finalScore": 78.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 10.2 km/h | Competitive Index: 15.3"
-        },
-        "Player_119": {
-            "metadata": {
-                "topSpeed": "10.7 km/h",
-                "finalScore": 78.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 10.7 km/h | Competitive Index: 16.0"
-        },
-        "Player_105": {
-            "metadata": {
-                "topSpeed": "0.0 km/h",
-                "finalScore": 70.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 0.0 km/h | Competitive Index: 0.0"
-        },
-        "Player_104": {
-            "metadata": {
-                "topSpeed": "10.6 km/h",
-                "finalScore": 78.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 10.6 km/h | Competitive Index: 15.9"
-        },
-        "Player_103": {
-            "metadata": {
-                "topSpeed": "9.2 km/h",
-                "finalScore": 77.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 9.2 km/h | Competitive Index: 13.8"
         }
     },
     "sessionPoints": 250,
     "tenant_id": "default_facility",
-    "createdAt": "2026-10-11T17:51:17.501236+00:00Z",
-    "expiresAt": "2026-10-11T20:51:17.501236+00:00Z",
+    "createdAt": "2026-10-30T19:35:10.019888+00:00Z",
+    "expiresAt": "2026-10-30T22:35:10.019888+00:00Z",
     "isPublished": false,
     "feedActivities": [
         {

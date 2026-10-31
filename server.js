@@ -1058,7 +1058,7 @@ app.get(
   '/api/leaderboard',
   async (req, res) => {
     try {
-      const snapshot = await firestoreDb.collection('leaderboard').get();
+      const snapshot = await firestoreDb.collection('leaderboards').get();
       const leaderboard = snapshot.docs.map(doc => doc.data());
 
       res.json({
