@@ -3,14 +3,15 @@ import { io } from 'socket.io-client';
 import CoachPortfolioCV from './CoachPortfolioCV';
 
 // Fixed Port: Updated to match backend URL
-const socket = io('https://campus-league-app.onrender.com');
+const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://campus-league-7sf1.onrender.com';
+const socket = io(API_BASE_URL);
 
 // 1. Standalone Admin / Coach Multi-Player View Component
 export const GroupReportView = () => {
   const [reports, setReports] = useState({});
 
   useEffect(() => {
-    fetchWithRetry('https://campus-league-app.onrender.com/api/admin/group_report')
+    fetchWithRetry(`${API_BASE_URL}/api/admin/group_report`)
       .then((res) => {
         if (!res.ok) {
           throw new Error(`HTTP status ${res.status}`);
@@ -142,7 +143,7 @@ export default function AnalyticsDashboard({ onAnalysisComplete, user, loggedInU
     formData.append('photo', uploadFile);
 
     try {
-      const res = await fetchWithRetry('https://campus-league-app.onrender.com/api/players/register', {
+      const res = await fetchWithRetry(`${API_BASE_URL}/api/players/register`, {
         method: 'POST',
         body: formData,
       });

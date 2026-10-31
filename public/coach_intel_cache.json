@@ -41,34 +41,16 @@
         }
     ],
     "individualPortals": {
-        "Player_61": {
+        "Player_95": {
             "metadata": {
-                "topSpeed": "18.9 km/h",
-                "finalScore": 89.0,
+                "topSpeed": "9.5 km/h",
+                "finalScore": 77.0,
                 "retention": "Active",
                 "position": "Futsal Player"
             },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 18.9 km/h | Competitive Index: 48.3"
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 9.5 km/h | Competitive Index: 14.2"
         },
-        "Player_59": {
-            "metadata": {
-                "topSpeed": "4.6 km/h",
-                "finalScore": 73.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 4.6 km/h | Competitive Index: 6.9"
-        },
-        "Player_58": {
-            "metadata": {
-                "topSpeed": "1.8 km/h",
-                "finalScore": 71.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 1.8 km/h | Competitive Index: 2.7"
-        },
-        "Player_57": {
+        "Player_94": {
             "metadata": {
                 "topSpeed": "6.7 km/h",
                 "finalScore": 75.0,
@@ -77,65 +59,83 @@
             },
             "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 6.7 km/h | Competitive Index: 10.1"
         },
-        "Player_56": {
+        "Player_93": {
             "metadata": {
-                "topSpeed": "36.0 km/h",
-                "finalScore": 99.0,
+                "topSpeed": "15.5 km/h",
+                "finalScore": 84.0,
                 "retention": "Active",
                 "position": "Futsal Player"
             },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 36.0 km/h | Competitive Index: 64.0"
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 15.5 km/h | Competitive Index: 33.2"
         },
-        "Player_55": {
+        "Player_92": {
             "metadata": {
-                "topSpeed": "12.4 km/h",
-                "finalScore": 79.0,
+                "topSpeed": "0.0 km/h",
+                "finalScore": 70.0,
                 "retention": "Active",
                 "position": "Futsal Player"
             },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 12.4 km/h | Competitive Index: 18.6"
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 0.0 km/h | Competitive Index: 0.0"
         },
-        "Player_54": {
+        "Player_91": {
             "metadata": {
-                "topSpeed": "36.0 km/h",
-                "finalScore": 99.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 36.0 km/h | Competitive Index: 64.0"
-        },
-        "Player_53": {
-            "metadata": {
-                "topSpeed": "3.1 km/h",
-                "finalScore": 72.0,
-                "retention": "Active",
-                "position": "Futsal Player"
-            },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 3.1 km/h | Competitive Index: 4.7"
-        },
-        "Player_52": {
-            "metadata": {
-                "topSpeed": "8.6 km/h",
+                "topSpeed": "7.7 km/h",
                 "finalScore": 76.0,
                 "retention": "Active",
                 "position": "Futsal Player"
             },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 8.6 km/h | Competitive Index: 12.9"
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 7.7 km/h | Competitive Index: 11.6"
         },
-        "Player_49": {
+        "Player_89": {
             "metadata": {
-                "topSpeed": "5.9 km/h",
+                "topSpeed": "5.6 km/h",
                 "finalScore": 74.0,
                 "retention": "Active",
                 "position": "Futsal Player"
             },
-            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 5.9 km/h | Competitive Index: 8.9"
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 5.6 km/h | Competitive Index: 8.4"
+        },
+        "Player_88": {
+            "metadata": {
+                "topSpeed": "9.9 km/h",
+                "finalScore": 77.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 9.9 km/h | Competitive Index: 14.9"
+        },
+        "Player_83": {
+            "metadata": {
+                "topSpeed": "4.9 km/h",
+                "finalScore": 73.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 4.9 km/h | Competitive Index: 7.4"
+        },
+        "Player_82": {
+            "metadata": {
+                "topSpeed": "7.0 km/h",
+                "finalScore": 75.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 7.0 km/h | Competitive Index: 10.5"
+        },
+        "Player_81": {
+            "metadata": {
+                "topSpeed": "36.0 km/h",
+                "finalScore": 99.0,
+                "retention": "Active",
+                "position": "Futsal Player"
+            },
+            "content": "Touch Quality: MATCH_COMPLETED. Peak Sprint: 36.0 km/h | Competitive Index: 64.0"
         }
     },
     "sessionPoints": 250,
     "tenant_id": "default_facility",
-    "createdAt": "2026-10-31T08:54:15.572391+00:00Z",
-    "expiresAt": "2026-10-31T11:54:15.572391+00:00Z",
+    "createdAt": "2026-10-31T12:05:11.806845+00:00Z",
+    "expiresAt": "2026-10-31T15:05:11.806845+00:00Z",
     "isPublished": false,
     "feedActivities": [
         {
