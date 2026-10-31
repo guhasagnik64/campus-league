@@ -150,7 +150,7 @@ export default function DashboardUploader({ currentUser, setDrillStats }) {
 
             // Non-blocking Firestore save attempt with error capture
             try {
-              await addDoc(collection(db, "leaderboards"), payload);
+              await addDoc(collection(db, "leaderboard"), payload);
             } catch (fsErr) {
               console.warn(`Firestore save skipped for ${pName} due to network issue:`, fsErr);
             }
