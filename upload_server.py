@@ -12,7 +12,9 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": [
     "http://localhost:5173", 
     "http://localhost:3000", 
-    "https://campus-league-app.onrender.com"
+    "https://campus-league-app.onrender.com",
+    "https://canpus-league-app.onrender.com",
+    r"https://.*\.onrender\.com"
 ]}}, supports_credentials=True)
 
 socketio = SocketIO(app, cors_allowed_origins="*")
