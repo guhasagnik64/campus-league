@@ -9,13 +9,7 @@ import subprocess
 import sqlite3
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": [
-    "http://localhost:5173", 
-    "http://localhost:3000", 
-    "https://campus-league-app.onrender.com",
-    "https://canpus-league-app.onrender.com",
-    r"https://.*\.onrender\.com"
-]}}, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True), supports_credentials=True)
 
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -233,7 +227,7 @@ def get_public_leaderboard():
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT entity_id AS player_id, ovr_rating, technical_score, goals
+            SELECT entity_id AS player_id, ovr_rating, technical_score, goals, metric_event
             FROM live_analytics
             ORDER BY id DESC
         """)
@@ -247,7 +241,8 @@ def get_public_leaderboard():
                 "rank": index,
                 "player_id": row["player_id"] or f"Player_{index}",
                 "ovr_rating": score,
-                "goals": row["goals"] or 1
+                "goals": row["goals"] or 1,
+                "metric_event": row["metric_event"] or "Left Foot Outside Cut Slalom"
             })
 
         return jsonify({
