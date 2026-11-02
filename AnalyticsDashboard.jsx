@@ -3,8 +3,9 @@ import { io } from 'socket.io-client';
 import CoachPortfolioCV from './CoachPortfolioCV';
 
 // Fixed Port: Updated to match backend URL
-const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://campus-league-7sf1.onrender.com';
-const socket = io(API_BASE_URL);
+const API_BASE_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:8000' 
+  : window.location.origin;
 
 // 1. Standalone Admin / Coach Multi-Player View Component
 export const GroupReportView = () => {

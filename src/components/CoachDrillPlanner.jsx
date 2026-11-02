@@ -4,8 +4,7 @@ import { io } from 'socket.io-client';
 // Dynamic API & Socket URL based on environment
 const API_BASE_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:8000' 
-  : 'https://campus-league-7sf1.onrender.com';
-
+  : window.location.origin;
 const socket = io(API_BASE_URL);
 
 export default function CoachDrillPlanner({ currentUser }) {
