@@ -19,6 +19,11 @@ import {
 const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://campus-league-7sf1.onrender.com';
 const SOCKET_URL = API_BASE_URL;
 
+const socket = io(SOCKET_URL, {
+  transports: ["polling", "websocket"],
+  reconnection: true
+});
+
 /**
  * Convert a Firestore Timestamp or normal date value
  * into a readable date/time string.
