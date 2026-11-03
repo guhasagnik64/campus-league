@@ -22,6 +22,10 @@ HOMOGRAPHY_MATRIX, _ = cv2.findHomography(SRC_PIXEL_PTS, DST_METER_PTS)
 
 # Global YOLO instantiation removed from here.
 
+# [MEMORY FIX] Analyze roughly this many frames per second of video instead of every frame.
+# Raise it (e.g. 15) if player IDs start switching; lower it (e.g. 6) for even less memory/CPU.
+ANALYSIS_FPS = 10
+
 def get_real_world_coords(pixel_x, pixel_y):
     """Transforms video pixel coordinates into actual pitch metrics (meters)"""
     point = np.array([[[float(pixel_x), float(pixel_y)]]], dtype=np.float32)
@@ -155,20 +159,33 @@ def process_drill_and_match_leaderboard(
     registered_embeddings = build_registered_embeddings(registered_players_db)
     tracked_performance = {}
 
+    # [MEMORY FIX] Work out how many source frames to skip between analyzed frames.
+    source_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    if source_fps != source_fps or source_fps <= 0:  # NaN / invalid guard
+        source_fps = 30.0
+    frame_stride = max(1, int(round(source_fps / ANALYSIS_FPS)))
+
     frame_index = 0
     while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
+        # [MEMORY FIX] grab() advances one frame cheaply; only retrieve() the ones we analyze.
+        if not cap.grab():
             break
 
-        frame_index += 1
+        frame_index += 1  # still counts SOURCE frames, so timing math stays correct
+        if frame_index % frame_stride != 0:
+            continue
+
+        ret, frame = cap.retrieve()
+        if not ret or frame is None:
+            continue
 
         results = yolo_model.track(
             frame, 
             persist=True, 
             classes=[0], 
             tracker="custom_bytetrack.yaml",
-            conf=0.35
+            conf=0.35,
+            verbose=False  # [MEMORY FIX] stop per-frame console logging
         )
 
         if results[0].boxes.id is not None:
@@ -191,6 +208,7 @@ def process_drill_and_match_leaderboard(
                 feet_x, feet_y = (x1 + x2) / 2.0, float(y2)
                 active_zone = assign_drill_zone(feet_x, feet_y)
                 meter_x, meter_y = get_real_world_coords(feet_x, feet_y)
+                meter_x, meter_y = float(meter_x), float(meter_y)
 
                 # Initialize or update player tracking data
                 if track_id not in tracked_performance:
@@ -214,15 +232,26 @@ def process_drill_and_match_leaderboard(
                         "is_registered": is_registered,
                         "reid_confidence": round(reid_score, 2),
                         "assigned_zone": active_zone,
-                        "positions": [(meter_x, meter_y)],
+                        # [MEMORY FIX] running totals instead of an ever-growing positions list
+                        "last_pos": (meter_x, meter_y),
+                        "total_dist": 0.0,
+                        "n_pos": 1,
+                        "sum_x": meter_x,
+                        "sum_x2": meter_x * meter_x,
                         "start_frame": frame_index,
                         "last_frame": frame_index,
                         "bbox": (x1, y1, x2, y2)
                     }
                 else:
-                    tracked_performance[track_id]["positions"].append((meter_x, meter_y))
-                    tracked_performance[track_id]["last_frame"] = frame_index
-                    tracked_performance[track_id]["bbox"] = (x1, y1, x2, y2)
+                    pdata_live = tracked_performance[track_id]
+                    last_x, last_y = pdata_live["last_pos"]
+                    pdata_live["total_dist"] += float(np.sqrt((last_x - meter_x)**2 + (last_y - meter_y)**2))
+                    pdata_live["last_pos"] = (meter_x, meter_y)
+                    pdata_live["n_pos"] += 1
+                    pdata_live["sum_x"] += meter_x
+                    pdata_live["sum_x2"] += meter_x * meter_x
+                    pdata_live["last_frame"] = frame_index
+                    pdata_live["bbox"] = (x1, y1, x2, y2)
 
     cap.release()
 
@@ -233,20 +262,21 @@ def process_drill_and_match_leaderboard(
     leaderboard_players = []
     for track_id, pdata in tracked_performance.items():
         total_frames = max(1, pdata["last_frame"] - pdata["start_frame"])
-        completion_time = round(total_frames / 30.0, 2)  # assuming standard 30fps
+        completion_time = round(total_frames / source_fps, 2)  # uses the video's real fps (falls back to 30)
 
-        # DYNAMIC CV METRIC CALCULATIONS
-        positions = pdata["positions"]
-        total_dist_meters = 0.0
-        for i in range(len(positions) - 1):
-            p1, p2 = positions[i], positions[i + 1]
-            total_dist_meters += float(np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2))
+        # DYNAMIC CV METRIC CALCULATIONS (from running totals)
+        total_dist_meters = pdata["total_dist"]
 
         time_sec = max(0.1, completion_time)
         calc_speed_kmh = round((total_dist_meters / time_sec) * 3.6, 1)
 
-        x_coords = [pos[0] for pos in positions]
-        lateral_disp = float(np.std(x_coords)) if len(x_coords) > 1 else 0.0
+        n_pos = pdata["n_pos"]
+        if n_pos > 1:
+            mean_x = pdata["sum_x"] / n_pos
+            variance = max(0.0, (pdata["sum_x2"] / n_pos) - (mean_x * mean_x))
+            lateral_disp = float(np.sqrt(variance))
+        else:
+            lateral_disp = 0.0
 
         # Dynamic Frame Payload built directly from Video Telemetry
         frame_payload = {
