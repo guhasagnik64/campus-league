@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import CoachPortfolioCV from './CoachPortfolioCV';
 
-/import { socket } from './socket';
+import { socket } from '../socket';
 
 // 1. Standalone Admin / Coach Multi-Player View Component
 export const GroupReportView = () => {
