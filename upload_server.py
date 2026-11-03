@@ -11,12 +11,7 @@ import sqlite3
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
-socketio = SocketIO(
-    app, 
-    cors_allowed_origins="*", 
-    async_mode="gevent", 
-    transports=["polling", "websocket"]
-)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
