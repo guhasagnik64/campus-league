@@ -1,15 +1,7 @@
 // src/App.jsx
 
 import React, { useState, useEffect } from 'react';
-import io from 'socket.io-client';
-
-const API_BASE_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:8000' 
-  : window.location.origin;
-const socket = io(API_BASE_URL, {
-  transports: ['websocket', 'polling']
-});
-
+import { socket } from './socket';
 import { db } from './firebase';
 import { AVAILABLE_DRILLS } from './utils/drills';
 

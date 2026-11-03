@@ -1,11 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { io } from 'socket.io-client';
-
-// Dynamic API & Socket URL based on environment
-const API_BASE_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:8000' 
-  : window.location.origin;
-const socket = io(API_BASE_URL);
+import { socket } from './socket';
 
 export default function CoachDrillPlanner({ currentUser }) {
   const [students, setStudents] = useState([]);

@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react';
-import { io } from 'socket.io-client';
 import CoachPortfolioCV from './CoachPortfolioCV';
 
-// Fixed Port: Updated to match backend URL
-const API_BASE_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:8000' 
-  : window.location.origin;
+/import { socket } from './socket';
 
 // 1. Standalone Admin / Coach Multi-Player View Component
 export const GroupReportView = () => {
@@ -189,7 +185,7 @@ export default function AnalyticsDashboard({ onAnalysisComplete, user, loggedInU
           <CoachPortfolioCV 
             user={user} 
             loggedInUser={loggedInUser} 
-            onClose={() => setShowCoachPortfolio(false)} 
+            onClose={() => setShowCoachPortfolio(false)}
           />
         </div>
       )}
