@@ -791,7 +791,8 @@ finally:
                     "ovr_score": dynamic_ovr,
                     "sprint_accel": round(real_top_speed, 1),
                     "pass_accuracy": f"{dynamic_pass_acc}%",
-                    "coach_report": ai_coach_report
+                    "coach_report": ai_coach_report,
+                    "createdAt": datetime.datetime.now().isoformat()
                 }
             }
             try:
