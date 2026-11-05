@@ -269,7 +269,34 @@ track_yaw_state = {}   # assigned_id -> last head yaw, for look-behind edge dete
 raw_coordinate_data = [] # Coordinates container for tracking data export
 accumulated_frame_history = [] # Container for multi-group sequential tracking telemetry
 
-
+# --- GEMINI AI DAILY REPORT GENERATOR ---
+def generate_ai_coach_insight(player_name, drill_name, ovr_score, pass_accuracy, sprint_speed):
+    """Generates a professional daily coach report using Gemini 2.5 Flash."""
+    if client is None:
+        return "GenAI client not initialized (missing API key)."
+    
+    prompt = f"""
+    You are an elite football/soccer academy head coach. Write a concise, professional daily performance report for {player_name} who completed "{drill_name}".
+    
+    Metrics:
+    - Overall Rating (OVR): {ovr_score}
+    - Passing Accuracy: {pass_accuracy}%
+    - Sprint Speed: {sprint_speed} km/h
+    
+    Provide:
+    1. A brief performance summary.
+    2. One key strength displayed.
+    3. One actionable area for improvement.
+    Keep the tone motivating, technical, and concise.
+    """
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        return response.text
+    except Exception as e:
+        return f"AI generation error: {e}"
 def consolidate_track_fragments(coord_rows, identity_map, registry):
     """
     The tracker drops and re-acquires players mid-video, producing many
@@ -747,7 +774,26 @@ finally:
                     "pass_accuracy": dynamic_pass_acc
                 }
             }
+            # --- GENERATE AI COACH REPORT ---
+            ai_coach_report = generate_ai_coach_insight(
+                player_name=display_name,
+                drill_name=drill_format.replace("_", " ").title(),
+                ovr_score=dynamic_ovr,
+                pass_accuracy=dynamic_pass_acc,
+                sprint_speed=round(real_top_speed, 1)
+            )
 
+            leaderboard_payload = {
+                "playerId": display_name,
+                "playerName": display_name,
+                "drillName": drill_format.replace("_", " ").title(),
+                "metrics": {
+                    "ovr_score": dynamic_ovr,
+                    "sprint_accel": round(real_top_speed, 1),
+                    "pass_accuracy": f"{dynamic_pass_acc}%",
+                    "coach_report": ai_coach_report
+                }
+            }
             try:
                 port = os.environ.get("PORT", "8000")
                 res = requests.post(f"http://127.0.0.1:{port}/api/process-drill-results", json=leaderboard_payload, timeout=30)
