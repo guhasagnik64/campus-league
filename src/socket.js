@@ -1,9 +1,11 @@
 import { io } from "socket.io-client";
 
-// Dynamically use current origin for API and socket, falling back correctly
+// Set both exported variable and window global variable
 export const API_BASE_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:8000' 
   : window.location.origin;
+
+window.API_BASE_URL = API_BASE_URL;
 
 export const SOCKET_URL = API_BASE_URL;
 
