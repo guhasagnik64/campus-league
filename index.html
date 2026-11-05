@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>J-SPORTS | Campus League</title>
+    
+    <!-- Define global window variables before any scripts load -->
+    <script>
+      window.API_BASE_URL = window.location.hostname === 'localhost' 
+        ? 'http://localhost:8000' 
+        : window.location.origin;
+      window.SOCKET_URL = window.API_BASE_URL;
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body>
