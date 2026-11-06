@@ -696,9 +696,7 @@ app.get(
     '/api/v1/:userId/scorecard'
   ],
   async (req, res) => {
-    const userId =
-      req.params.userId ||
-      'default_user';
+    const userId = req.params.userId || 'default_user';
 
     try {
       const doc = await firestoreDb.collection('leaderboard').doc(userId).get();
@@ -706,16 +704,12 @@ app.get(
       if (!doc.exists) {
         return res.json({
           success: true,
-          player_id:
-            userId,
-          overallRating:
-            85,
-          sprintVelocity:
-            '26.4 km/h',
-          passAccuracy:
-            '84%',
-          drillsCompleted:
-            10,
+          player_id: userId,
+          created_at: new Date().toISOString(),
+          overallRating: 85,
+          sprintVelocity: '26.4 km/h',
+          passAccuracy: '84%',
+          drillsCompleted: 10,
           radarStats: {
             pace: 82,
             passing: 84,
@@ -725,23 +719,21 @@ app.get(
         });
       }
 
+      const data = doc.data();
       return res.json({
         success: true,
-        ...doc.data()
+        created_at: data.created_at || data.createdAt || new Date().toISOString(),
+        ...data
       });
     } catch (err) {
       return res.json({
         success: true,
-        player_id:
-          userId,
-        overallRating:
-          85,
-        sprintVelocity:
-          '26.4 km/h',
-        passAccuracy:
-          '84%',
-        drillsCompleted:
-          10,
+        player_id: userId,
+        created_at: new Date().toISOString(),
+        overallRating: 85,
+        sprintVelocity: '26.4 km/h',
+        passAccuracy: '84%',
+        drillsCompleted: 10,
         radarStats: {
           pace: 82,
           passing: 84,
