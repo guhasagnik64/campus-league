@@ -342,7 +342,16 @@ export default function PlayerProfileScorecard({
           <h2 className="text-lg font-semibold text-white mb-4">Detailed Session History & Telemetry</h2>
           
           <div className="text-sm text-slate-400 mb-4">
-            <span>Created: {formatFirestoreDate(scorecard?.created_at || activeStudent?.createdAt)}</span>
+            <span>
+              Created: {formatFirestoreDate(
+                scorecard?.created_at || 
+                scorecard?.createdAt || 
+                scorecard?.metrics?.createdAt || 
+                activeStudent?.createdAt || 
+                activeStudent?.created_at || 
+                activeStudent?.timestamp
+              )}
+            </span>
           </div>
 
           {liveTelemetry && (
