@@ -167,8 +167,7 @@ export default function PlayerProfileScorecard({
     const scorecardsRef = collection(db, "scorecards");
     const scorecardsQuery = query(
       scorecardsRef,
-      where("playerId", "==", String(playerId)),
-      orderBy("createdAt", "desc")
+      where("playerId", "==", String(playerId))
     );
 
     const unsubscribe = onSnapshot(
@@ -287,7 +286,7 @@ export default function PlayerProfileScorecard({
         <div className="flex flex-col items-center justify-center mb-8">
           <div className="text-center mb-4">
             <h1 className="text-2xl font-bold tracking-wide text-white">Players ranked by Overall rating</h1>
-            <p className="text-sm text-slate-400">Campus individual drill performance profile.</p>
+            <p className="text-sm text-slate-400">Campus individual drill performance profile profile.</p>
           </div>
 
           {/* FUT Card */}
