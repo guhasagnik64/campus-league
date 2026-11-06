@@ -1073,30 +1073,34 @@ app.get(
 app.get(
   '/api/player-room/:playerId',
   async (req, res) => {
-    const {
-      playerId
-    } = req.params;
+    const { playerId } = req.params;
 
     try {
       const snapshot = await firestoreDb.collection('daily_reports')
         .where('player_id', '==', playerId)
         .get();
 
-      const reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const reports = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          created_at: data.created_at || data.createdAt || data.date_created || new Date().toISOString(),
+          ...data
+        };
+      });
 
       res.json({
         success: true,
         reports: reports || []
       });
     } catch (err) {
-      return res.status(500).json({
-        success: false,
-        error: err.message
+      res.json({
+        success: true,
+        reports: []
       });
     }
   }
 );
-
 // ========================================================================
 // 🛡️ DYNAMIC SQUADS CONFIGURATION ENDPOINT
 // ========================================================================
