@@ -1055,6 +1055,13 @@ app.get(
       
       const leaderboard = snapshot.docs.map(doc => {
         const data = doc.data();
+        let rawDrill = data.drill_type || data.drillType || 'General Drill';
+        
+        let normalizedDrill = rawDrill;
+        if (rawDrill.toLowerCase().includes('slalom') || rawDrill.toLowerCase().includes('left_foot')) {
+          normalizedDrill = 'left_foot_slalom';
+        }
+
         return {
           id: doc.id,
           playerName: data.player_name || data.playerName || data.name || 'Unknown Player',
@@ -1062,7 +1069,8 @@ app.get(
           sprintAccel: data.sprintAccel || data.sprint_accel || 0,
           passAccuracy: data.passAccuracy || data.pass_acc || 0,
           controlPrecision: data.controlPrecision || data.control_precision || 0,
-          drillType: data.drill_type || data.drillType || 'General Drill',
+          drill_type: normalizedDrill,
+          drillType: normalizedDrill,
           createdAt: data.createdAt || data.created_at || new Date().toISOString(),
           ...data
         };
