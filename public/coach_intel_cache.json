@@ -134,8 +134,8 @@
     },
     "sessionPoints": 250,
     "tenant_id": "default_facility",
-    "createdAt": "2026-11-03T20:10:43.247286+00:00Z",
-    "expiresAt": "2026-11-03T23:10:43.247286+00:00Z",
+    "createdAt": "2026-11-08T06:34:43.844233+00:00Z",
+    "expiresAt": "2026-11-08T09:34:43.844233+00:00Z",
     "isPublished": false,
     "feedActivities": [
         {
