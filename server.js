@@ -1050,12 +1050,30 @@ app.get(
   '/api/leaderboard',
   async (req, res) => {
     try {
-      const snapshot = await firestoreDb.collection('leaderboards').get();
-      const leaderboard = snapshot.docs.map(doc => doc.data());
+      // Pointing to the correct singular collection name
+      const snapshot = await firestoreDb.collection('leaderboard').get();
+      
+      const leaderboard = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          playerName: data.player_name || data.playerName || data.name || 'Unknown Player',
+          score: data.score || data.ovr_score || data.overallRating || 0,
+          sprintAccel: data.sprintAccel || data.sprint_accel || 0,
+          passAccuracy: data.passAccuracy || data.pass_acc || 0,
+          controlPrecision: data.controlPrecision || data.control_precision || 0,
+          drillType: data.drill_type || data.drillType || 'General Drill',
+          createdAt: data.createdAt || data.created_at || new Date().toISOString(),
+          ...data
+        };
+      });
+
+      // Sort descending by highest score
+      leaderboard.sort((a, b) => b.score - a.score);
 
       res.json({
         success: true,
-        leaderboard: leaderboard || []
+        leaderboard: leaderboard
       });
     } catch (err) {
       return res.status(500).json({
