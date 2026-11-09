@@ -1,1173 +1,774 @@
-import cron from 'node-cron';
-import express from 'express';
-import http from 'http';
-import { Server } from 'socket.io';
-import cors from 'cors';
-import fs from 'fs';
-import path from 'path';
-import multer from 'multer';
-import { spawn } from 'child_process';
-import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-const require = createRequire(import.meta.url);
-let admin = null;
+import { useNavigate } from "react-router-dom";
+import { AVAILABLE_DRILLS } from "../utils/drills";
 
-try {
-  admin = require('firebase-admin');
-  if (admin && admin.default) {
-    admin = admin.default;
-  }
-} catch (e) {
-  console.warn("⚠️ [FIREBASE WARNING] firebase-admin module not found or failed to load. Running in local fallback mode.");
-}
+const API_BASE_URL = "https://campus-league-7sfl.onrender.com";
 
-// Safe Firebase Admin SDK Setup
-// firebase-admin v14 moved the API surface: apps -> getApps(), credential.cert -> cert(),
-// firestore() -> require('firebase-admin/firestore').getFirestore(). The old names no
-// longer exist on the CJS export, so this block silently skipped init and every
-// Firestore write fell into the no-op stub below.
-const getAppsFn = admin && (admin.getApps || (() => admin.apps || []));
-const certFn = admin && (admin.cert || (admin.credential && admin.credential.cert));
+export default function GlobalCampusLeaderboard({
+  onSelectPlayer,
+}) {
+  const navigate = useNavigate();
 
-if (admin && getAppsFn && getAppsFn().length === 0) {
-  let serviceAccount = null;
-  if (process.env.FIREBASE_CREDENTIALS) {
+  const [leaderboardFeed, setLeaderboardFeed] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const [activeTab, setActiveTab] = useState("global");
+  const [selectedGroup, setSelectedGroup] = useState("Group A");
+  const [selectedDrillType, setSelectedDrillType] =
+    useState("all");
+
+  const todayDateStr = useMemo(
+    () => new Date().toISOString().split("T")[0],
+    []
+  );
+
+  const [availableGroups, setAvailableGroups] = useState([
+    "Group A",
+    "Group B",
+    "Group C",
+    "default_group",
+  ]);
+
+  const [availableDrills, setAvailableDrills] = useState([]);
+
+  // ------------------------------------------------------------
+  // PLAYER ROW CLICK
+  // ------------------------------------------------------------
+
+  const handlePlayerRowClick = (
+    targetPlayerId,
+    playerData,
+    drillName
+  ) => {
+    const activePlayerId = localStorage.getItem("activePlayerId");
+
+    let userRole = "";
+    let signedInPlayerName = "Signed-in Athlete";
     try {
-      serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
-    } catch (err) {
-      console.error("⚠️ Failed to parse FIREBASE_CREDENTIALS:", err.message);
-    }
-  } else {
-    const credPath = path.join(process.cwd(), 'firebase_credentials.json');
-    if (fs.existsSync(credPath)) {
-      try {
-        serviceAccount = JSON.parse(fs.readFileSync(credPath, 'utf8'));
-      } catch (err) {
-        console.error("⚠️ Failed to parse firebase_credentials.json:", err.message);
+      const storedUser = localStorage.getItem("jsports_user");
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        userRole = (parsedUser.role || parsedUser.userRole || "").toLowerCase().trim();
+        signedInPlayerName = parsedUser.name || parsedUser.username || "Signed-in Athlete";
       }
+    } catch (e) {
+      console.error("Error parsing user role:", e);
     }
-  }
-  try {
-    if (serviceAccount && certFn) {
-      admin.initializeApp({ credential: certFn(serviceAccount) });
-    } else if (!serviceAccount) {
-      admin.initializeApp();
-    }
-  } catch (err) {
-    console.error("⚠️ Failed to initialize Firebase app:", err.message);
-  }
-}
 
-// Safe Firestore & Admin exports fallback
-let firestoreDb = null;
-let firestoreFieldValue = null;
-try {
-  if (admin && getAppsFn && getAppsFn().length > 0) {
-    const firestoreModule = require('firebase-admin/firestore');
-    firestoreDb = firestoreModule.getFirestore ? firestoreModule.getFirestore() : admin.firestore();
-    firestoreFieldValue = firestoreModule.FieldValue || (admin.firestore && admin.firestore.FieldValue);
-  }
-} catch (err) {
-  console.error("⚠️ Failed to initialize Firestore client:", err.message);
-}
-if (!firestoreDb) {
-  console.warn("⚠️ [FIREBASE WARNING] Firestore unavailable — persistence routes will serve empty stubs.");
-  firestoreDb = {
-    collection: () => ({
-      doc: () => ({ set: async () => {}, get: async () => ({ exists: false }), update: async () => {} }),
-      add: async () => {},
-      get: async () => ({ docs: [] }),
-      where: () => ({ get: async () => ({ docs: [] }) })
-    })
+    if (!userRole) {
+      const rawRole = localStorage.getItem("userRole") || localStorage.getItem("role") || "";
+      userRole = rawRole.toLowerCase().trim();
+    }
+
+    const isExplicitAdmin = userRole === "admin" || userRole === "coach";
+    const isAdminUser = localStorage.getItem("jsports_user")?.includes('"admin_') || false;
+
+    const canAccess =
+      isExplicitAdmin ||
+      isAdminUser ||
+      String(activePlayerId) === String(targetPlayerId);
+
+    if (!canAccess) {
+      alert(
+        "🔒 Access Denied: This athlete's performance room is private."
+      );
+      return;
+    }
+
+    if (onSelectPlayer) {
+      onSelectPlayer(playerData);
+    }
+
+    const pName = playerData.player_name || playerData.name || "Athlete";
+    const pScore = playerData.score ?? playerData.metric ?? playerData.performance ?? playerData.highest_ovr ?? playerData.ovr_score ?? 0;
+
+    navigate(`/portfolio/${encodeURIComponent(String(targetPlayerId || "unknown"))}`, {
+      state: {
+        playerData,
+        signedInPlayer: signedInPlayerName,
+        playDescription: `Detailed performance review for ${pName} in drill "${drillName || 'Training Session'}", achieving a score of ${pScore}. Observed and documented from the perspective of ${signedInPlayerName}.`,
+      },
+    });
   };
-}
-const firebaseAdmin = { firestore: { FieldValue: firestoreFieldValue || { serverTimestamp: () => new Date() } } };
-// Resolve directory configurations for ES Modules syntax stability
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
-const STORAGE_CHAT_ID = process.env.STORAGE_CHAT_ID || "";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
-const app = express();
-
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-// ========================================================================
-// STATIC ASSET ROUTING
-// ========================================================================
-
-app.use(
-  '/stream',
-  express.static(path.join(__dirname, 'public'))
-);
-
-app.use(
-  '/videos',
-  express.static(path.join(__dirname, 'my_cloud_space'))
-);
-
-app.use(
-  '/uploads',
-  express.static(path.join(__dirname, 'public'))
-);
-
-// ========================================================================
-// REQUIRED WORKING DIRECTORIES
-// ========================================================================
-
-const uploadDir = path.join(
-  __dirname,
-  'my_cloud_space'
-);
-
-const publicDir = path.join(
-  __dirname,
-  'public'
-);
-
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, {
-    recursive: true
-  });
-}
-
-if (!fs.existsSync(publicDir)) {
-  fs.mkdirSync(publicDir, {
-    recursive: true
-  });
-}
-
-// ========================================================================
-// VIDEO UPLOAD STORAGE
-// ========================================================================
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-
-  filename: (req, file, cb) => {
-    const cleanName =
-      file.originalname.replace(
-        /\s+/g,
-        '_'
-      );
-
-    cb(null, cleanName);
-  }
-});
-
-const upload = multer({
-  storage
-});
-
-// ========================================================================
-// PLAYER REFERENCE PHOTO STORAGE
-// ========================================================================
-
-const photoStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, publicDir);
-  },
-
-  filename: (req, file, cb) => {
-    const ext =
-      path.extname(
-        file.originalname
-      );
-
-    const playerId =
-      req.body.player_id ||
-      req.body.playerName ||
-      req.body.player ||
-      'player';
-
-    const cleanId =
-      String(playerId).replace(
-        /[^a-zA-Z0-9_-]/g,
-        ''
-      );
-
-    const cleanName =
-      `ref_${cleanId}_${Date.now()}${ext}`;
-
-    cb(null, cleanName);
-  }
-});
-
-const uploadPhoto = multer({
-  storage: photoStorage
-});
-
-// ========================================================================
-// HTTP + SOCKET.IO SERVER
-// ========================================================================
-
-const server =
-  http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: [
-      'http://localhost:5173',
-      'http://localhost:5177',
-      'http://127.0.0.1:5173',
-      'http://127.0.0.1:5177'
-    ],
-
-    methods: [
-      'GET',
-      'POST'
-    ],
-
-    credentials: true
-  }
-});
-
-// ========================================================================
-// REAL-TIME WEBSOCKETS DATA SYNC CHANNEL
-// ========================================================================
-
-io.on(
-  'connection',
-  (socket) => {
-    console.log(
-      `[SOCKET CONNECTED] Active Data Client Pipeline Established: ${socket.id}`
-    );
-
-    socket.on(
-      'telemetry_stream',
-      (data) => {
-        io.emit(
-          'ui_telemetry_broadcast',
-          data
-        );
-      }
-    );
-
-    socket.on(
-      'disconnect',
-      () => {
-        console.log(
-          `[SOCKET DISCONNECTED] Client detached: ${socket.id}`
-        );
-      }
-    );
-  }
-);
-
-// ========================================================================
-// 🎯 DYNAMIC DRILL CONFIGURATION ENDPOINTS
-// ========================================================================
-
-app.get(
-  '/api/drills',
-  async (req, res) => {
-    try {
-      const snapshot = await firestoreDb.collection('drills').get();
-      const drills = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      res.json({
-        success: true,
-        drills: drills || []
-      });
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-        error: err.message
-      });
-    }
-  }
-);
-
-app.post(
-  '/api/drills/configure',
-  async (req, res) => {
-    const {
-      id,
-      name,
-      category,
-      rules
-    } = req.body;
-
-    if (
-      !id ||
-      !name ||
-      !rules
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Missing required drill configuration fields.'
-      });
-    }
-
-    const rulesJsonString =
-      typeof rules === 'string'
-        ? rules
-        : JSON.stringify(rules);
-
-    try {
-      await firestoreDb.collection('drills').doc(String(id)).set({
-        id: String(id),
-        name,
-        category: category || 'custom',
-        rules_json: rulesJsonString,
-        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
-      res.json({
-        success: true,
-        message:
-          `Dynamic drill rule '${name}' configured successfully!`
-      });
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-        error: err.message
-      });
-    }
-  }
-);
-
-// ========================================================================
-// 📸 INTAKE & SINGLE PHOTO UPLOAD ENDPOINT
-// ========================================================================
-
-app.post(
-  '/api/upload',
-  uploadPhoto.any(),
-  (req, res) => {
-    if (
-      !req.files ||
-      req.files.length === 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: 'No file uploaded'
-      });
-    }
-
-    const uploadedFile =
-      req.files[0];
-
-    const fileUrl =
-      `/uploads/${uploadedFile.filename}`;
-
-    const playerName =
-      req.body.playerName ||
-      req.body.player ||
-      'SA';
-
-    try {
-      const knownPlayersDir =
-        path.join(
-          __dirname,
-          'Known_players'
-        );
-
-      if (
-        !fs.existsSync(
-          knownPlayersDir
-        )
-      ) {
-        fs.mkdirSync(
-          knownPlayersDir,
-          {
-            recursive: true
-          }
-        );
-      }
-
-      const cleanPlayerName =
-        String(playerName).replace(
-          /\s+/g,
-          '_'
-        );
-
-      const targetPath =
-        path.join(
-          knownPlayersDir,
-          `${cleanPlayerName}.jpg`
-        );
-
-      fs.copyFileSync(
-        uploadedFile.path,
-        targetPath
-      );
-
-      console.log(
-        `📁 [INTAKE PERSISTED]: Saved profile photo to ${targetPath}`
-      );
-
-    } catch (copyErr) {
-      console.error(
-        '⚠️ [INTAKE COPY WARNING]: Failed to sync photo to Known_players:',
-        copyErr
-      );
-    }
-
-    return res.json({
-      success: true,
-      message:
-        'Intake photo uploaded and synced to persistent player memory',
-      url: fileUrl,
-      filePath: fileUrl,
-      filename:
-        uploadedFile.filename
-    });
-  }
-);
-
-// ========================================================================
-// 👕 ATTIRE CHECK-IN UPLOAD ROUTE
-// ========================================================================
-
-app.post(
-  [
-    '/api/upload-attire',
-    '/api/attire-checkin'
-  ],
-  uploadPhoto.any(),
-  (req, res) => {
-    if (
-      !req.files ||
-      req.files.length === 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'No attire photo uploaded.'
-      });
-    }
-
-    const uploadedFile =
-      req.files[0];
-
-    const fileUrl =
-      `/uploads/${uploadedFile.filename}`;
-
-    const playerName =
-      req.body.playerName ||
-      req.body.player ||
-      'Arin';
-
-    try {
-      const cleanPlayer =
-        String(playerName)
-          .toLowerCase()
-          .replace(
-            /\s+/g,
-            '_'
-          );
-
-      const uploadsDir =
-        path.join(
-          publicDir,
-          'uploads'
-        );
-
-      if (
-        !fs.existsSync(
-          uploadsDir
-        )
-      ) {
-        fs.mkdirSync(
-          uploadsDir,
-          {
-            recursive: true
-          }
-        );
-      }
-
-      const targetPath =
-        path.join(
-          uploadsDir,
-          `${cleanPlayer}_attire.jpg`
-        );
-
-      fs.copyFileSync(
-        uploadedFile.path,
-        targetPath
-      );
-
-      console.log(
-        `👕 [ATTIRE CHECK-IN PERSISTED]: Saved to ${targetPath}`
-      );
-
-    } catch (e) {
-      console.error(
-        '⚠️ [ATTIRE COPY WARNING]:',
-        e.message
-      );
-    }
-
-    return res.json({
-      success: true,
-      message:
-        'Attire intake photo saved successfully!',
-      imageUrl:
-        fileUrl,
-      url:
-        fileUrl,
-      filename:
-        uploadedFile.filename
-    });
-  }
-);
-
-// ========================================================================
-// 📸 PLAYER REFERENCE PHOTOS & RE-ID CACHE
-// ========================================================================
-
-app.post(
-  '/api/players/register',
-  uploadPhoto.single('photo'),
-  async (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'No image file uploaded.'
-      });
-    }
-
-    const playerId =
-      req.body.player_id ||
-      'PLR-101';
-
-    const name =
-      req.body.name ||
-      playerId;
-
-    const groupId =
-      req.body.group_id ||
-      'Group A';
-
-    const photoUrl =
-      `/uploads/${req.file.filename}`;
-
-    const absolutePhotoPath =
-      req.file.path;
-
-    const cachePath =
-      path.join(
-        publicDir,
-        'coach_intel_cache.json'
-      );
-
-    let cacheData = {};
-
-    if (
-      fs.existsSync(cachePath)
-    ) {
-      try {
-        cacheData =
-          JSON.parse(
-            fs.readFileSync(
-              cachePath,
-              'utf8'
-            )
-          );
-      } catch (e) {
-        cacheData = {};
-      }
-    }
-
-    cacheData.trackedFaceUrl =
-      photoUrl;
-
-    cacheData.activePlayer =
-      name;
-
-    cacheData.activePlayerId =
-      playerId;
-
-    fs.writeFileSync(
-      cachePath,
-      JSON.stringify(
-        cacheData,
-        null,
-        2
-      )
-    );
-
-    try {
-      await firestoreDb.collection('leaderboard').doc(playerId).set({
-        player_id: playerId,
-        player_name: name,
-        photo_url: photoUrl,
-        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-    } catch (e) {
-      console.error('[FIRESTORE LEADERBOARD ERROR]:', e.message);
-    }
-
-    const pythonExtractor =
-      spawn(
-        'python3',
-        [
-          'live_scouting_engine.py',
-          '--extract_features',
-          absolutePhotoPath,
-          '--player_id',
-          playerId,
-          '--player_name',
-          name,
-          '--group_id',
-          groupId
-        ]
-      );
-
-    pythonExtractor.stdout.on(
-      'data',
-      (data) =>
-        console.log(
-          `[RE-ID EXTRACTOR OUTPUT]: ${data.toString()}`
-        )
-    );
-
-    pythonExtractor.stderr.on(
-      'data',
-      (data) =>
-        console.error(
-          `[RE-ID EXTRACTOR ERROR]: ${data.toString()}`
-        )
-    );
-
-    return res.json({
-      success: true,
-      message:
-        'Player reference image saved successfully in public directory and cache updated.',
-      player: {
-        player_id:
-          playerId,
-        name:
-          name,
-        group_id:
-          groupId,
-        photo_url:
-          photoUrl,
-        local_path:
-          absolutePhotoPath
-      }
-    });
-  }
-);
-
-// ========================================================================
-// 📋 FETCH PLAYER DAILY REPORTS
-// ========================================================================
-
-app.get(
-  '/api/player-reports',
-  async (req, res) => {
-    const playerName =
-      req.query.player_name ||
-      req.query.player_id ||
-      'SA';
-
-    try {
-      const snapshot = await firestoreDb.collection('daily_reports')
-        .where('player_name', '==', playerName)
-        .get();
-
-      const reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      return res.json(reports || []);
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-        error: err.message
-      });
-    }
-  }
-);
-
-// ========================================================================
-// 🎯 FETCH PLAYER SCORECARD
-// ========================================================================
-
-app.get(
-  [
-    '/api/v1/players/:userId/scorecard',
-    '/api/v1/:userId/scorecard'
-  ],
-  async (req, res) => {
-    const userId = req.params.userId || 'default_user';
-
-    try {
-      const doc = await firestoreDb.collection('leaderboard').doc(userId).get();
-
-      if (!doc.exists) {
-        return res.json({
-          success: true,
-          player_id: userId,
-          created_at: new Date().toISOString(),
-          overallRating: 85,
-          sprintVelocity: '26.4 km/h',
-          passAccuracy: '84%',
-          drillsCompleted: 10,
-          radarStats: {
-            pace: 82,
-            passing: 84,
-            dribbling: 88,
-            vision: 80
-          }
-        });
-      }
-
-      const data = doc.data();
-      return res.json({
-        success: true,
-        created_at: data.created_at || data.createdAt || new Date().toISOString(),
-        ...data
-      });
-    } catch (err) {
-      return res.json({
-        success: true,
-        player_id: userId,
-        created_at: new Date().toISOString(),
-        overallRating: 85,
-        sprintVelocity: '26.4 km/h',
-        passAccuracy: '84%',
-        drillsCompleted: 10,
-        radarStats: {
-          pace: 82,
-          passing: 84,
-          dribbling: 88,
-          vision: 80
-        }
-      });
-    }
-  }
-);
-
-// ========================================================================
-// 📈 PROCESS CV DRILL RESULTS & UPDATE LEADERBOARD (Dual Format Support)
-// ========================================================================
-
-app.post(
-  '/api/process-drill-results',
-  async (req, res) => {
-    try {
-      const payload = req.body;
-      console.log("🏆 [PROCESS DRILL RESULTS] Received payload:", payload);
-
-      // Format 1: Array of player leaderboard entries
-      if (Array.isArray(payload)) {
-        for (const playerEntry of payload) {
-          const playerId = playerEntry.player_id || playerEntry.id;
-          if (playerId) {
-            await firestoreDb.collection('leaderboard').doc(String(playerId)).set(playerEntry, { merge: true });
-          }
-        }
-      } 
-      // Format 2: Single object with playerId and metrics
-      else if (payload && payload.playerId && payload.metrics) {
-        const { playerId, playerName, drillName, metrics } = payload;
-        const nameToSave = playerName || playerId;
-        const ovrScore = metrics.ovr_score || 0;
-        const sprintSpeed = metrics.sprint_accel || 0;
-        const passAccuracy = metrics.pass_accuracy || 0;
-        const currentDate = new Date().toLocaleDateString('en-GB');
-
-        await firestoreDb.collection('daily_reports').add({
-          player_id: playerId,
-          player_name: nameToSave,
-          drill_name: drillName,
-          ovr_score: ovrScore,
-          sprint_speed: `${sprintSpeed} km/h`,
-          pass_accuracy: `${passAccuracy}%`,
-          date_created: currentDate,
-          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
-        });
-
-        const leaderboardRef = firestoreDb.collection('leaderboard').doc(playerId);
-        const doc = await leaderboardRef.get();
-
-        if (doc.exists) {
-          const data = doc.data();
-          const existingTopSpeed = data.top_speed || 0;
-          const existingAvgPass = data.avg_pass_acc || 0;
-          const existingHighestOvr = data.highest_ovr || 0;
-          const existingTotalDrills = data.total_drills || 0;
-
-          await leaderboardRef.update({
-            player_name: nameToSave,
-            total_drills: existingTotalDrills + 1,
-            top_speed: Math.max(existingTopSpeed, sprintSpeed),
-            avg_pass_acc: Math.round((existingAvgPass + passAccuracy) / 2),
-            highest_ovr: Math.max(existingHighestOvr, ovrScore),
-            updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
-          });
-        } else {
-          await leaderboardRef.set({
-            player_id: playerId,
-            player_name: nameToSave,
-            total_drills: 1,
-            top_speed: sprintSpeed,
-            avg_pass_acc: passAccuracy,
-            highest_ovr: ovrScore,
-            updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp()
-          });
+  // ------------------------------------------------------------
+  // NORMALIZE LEADERBOARD PAYLOAD
+  // ------------------------------------------------------------
+
+  const normalizePayloadToSessions =
+    useCallback(
+      (rawPayload) => {
+        if (!rawPayload) {
+          return [];
         }
 
-        if (typeof io !== 'undefined' && io) {
-          io.emit(
-            'leaderboard_updated',
+        if (
+          Array.isArray(rawPayload) &&
+          rawPayload.length === 0
+        ) {
+          return [];
+        }
+
+        if (
+          Array.isArray(rawPayload) &&
+          rawPayload[0]?.players
+        ) {
+          return rawPayload;
+        }
+
+        if (
+          typeof rawPayload === "object" &&
+          !Array.isArray(rawPayload) &&
+          rawPayload.players
+        ) {
+          return [
             {
-              playerId,
-              playerName: nameToSave,
-              drillName,
-              metrics
-            }
+              drill_id:
+                rawPayload.drill_id ||
+                rawPayload.drill_name ||
+                "drill_session",
+
+              drill_name:
+                rawPayload.drill_name ||
+                rawPayload.drill_id ||
+                "Training Session",
+
+              date:
+                rawPayload.date ||
+                todayDateStr,
+
+              players:
+                rawPayload.players,
+            },
+          ];
+        }
+
+        if (Array.isArray(rawPayload)) {
+          return [
+            {
+              drill_id:
+                "drill_session",
+
+              drill_name:
+                "Active Campus Drill",
+
+              date:
+                todayDateStr,
+
+              players:
+                rawPayload,
+            },
+          ];
+        }
+
+        return [];
+      },
+      [todayDateStr]
+    );
+
+  // ------------------------------------------------------------
+  // EXTRACT GROUP / DRILL FILTER OPTIONS
+  // ------------------------------------------------------------
+
+  const extractFilterOptions =
+    useCallback((feed) => {
+      const drillsSet = new Set();
+
+      const groupsSet = new Set([
+        "Group A",
+        "Group B",
+        "Group C",
+        "default_group",
+      ]);
+
+      feed.forEach((session) => {
+        if (
+          session.drill_name ||
+          session.drill_id
+        ) {
+          drillsSet.add(
+            session.drill_name ||
+              session.drill_id
           );
         }
-      }
 
-      return res.status(200).json({
-        status: 'success',
-        message: 'Leaderboard updated successfully'
-      });
-    } catch (err) {
-      console.error("⚠️ [LEADERBOARD SYNC ERROR]:", err.message);
-      return res.status(500).json({
-        success: false,
-        error: err.message
-      });
-    }
-  }
-);
-
-// ========================================================================
-// 🎬 PROCESS VIDEO ANALYSIS
-// ========================================================================
-
-app.post(
-  [
-    '/api/process-video',
-    '/api/run-analysis',
-    '/api/upload-analysis',
-    '/api/upload-drill'
-  ],
-  upload.any(),
-  (req, res) => {
-    const uploadedFile =
-      (
-        req.files &&
-        req.files.length > 0
-      )
-        ? req.files[0]
-        : null;
-
-    const uploadedFilePath =
-      uploadedFile
-        ? uploadedFile.path
-        : req.body.videoPath;
-
-    const drillFormat =
-      req.body.drillFormat ||
-      req.body.drillType ||
-      '3_players_drill';
-
-    const playerName =
-      req.body.playerName ||
-      'SA';
-
-    res.json({
-      success: true,
-      message:
-        'Video received successfully. Processing telemetry.',
-      videoPath:
-        uploadedFilePath || '',
-      videoUrl:
-        uploadedFile
-          ? `/videos/${uploadedFile.filename}`
-          : ''
-    });
-
-    if (uploadedFilePath) {
-      const pythonProcess =
-        spawn(
-          'python3',
-          [
-            'live_scouting_engine.py',
-            '--video',
-            uploadedFilePath,
-            '--drill',
-            drillFormat,
-            '--player',
-            playerName
-          ]
-        );
-
-      pythonProcess.stdout.on(
-        'data',
-        (data) =>
-          console.log(
-            `[CV STDOUT]: ${data.toString()}`
-          )
-      );
-
-      pythonProcess.stderr.on(
-        'data',
-        (data) =>
-          console.error(
-            `[CV STDERR]: ${data.toString()}`
-          )
-      );
-    }
-  }
-);
-
-// ========================================================================
-// 👥 PROCESS DYNAMIC GROUP DRILL ANALYSIS
-// ========================================================================
-
-app.post(
-  '/api/process-group-drill',
-  uploadPhoto.array('player_photos'),
-  (req, res) => {
-    try {
-      if (
-        !req.files ||
-        req.files.length === 0
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            'No player reference photos uploaded.'
-        });
-      }
-
-      const groupConfig =
-        typeof req.body.group_config ===
-        'string'
-          ? JSON.parse(
-              req.body.group_config
-            )
-          : req.body.group_config;
-
-      const {
-        video_path,
-        drill_type,
-        group_id,
-        players
-      } = groupConfig;
-
-      const registeredPlayersDb = {};
-
-      players.forEach(
-        (player) => {
-          const file =
-            req.files[
-              player.photo_index
-            ];
-
-          if (file) {
-            registeredPlayersDb[
-              player.id
-            ] = {
-              player_id:
-                player.id,
-              player_name:
-                player.name,
-              group_id:
-                group_id ||
-                'Group_Alpha',
-              image_path:
-                file.path
-            };
+        (
+          session.players || []
+        ).forEach((player) => {
+          if (player.group_id) {
+            groupsSet.add(
+              player.group_id
+            );
           }
-        }
-      );
 
-      res.json({
-        success: true,
-        message:
-          `Group analysis initialized for ${players.length} players.`,
-        group_id:
-          group_id
+          if (player.squad) {
+            groupsSet.add(
+              player.squad
+            );
+          }
+        });
       });
 
-      const pythonProcess =
-        spawn(
-          'python3',
-          [
-            'analytics_engine.py',
-            '--video',
-            video_path,
-            '--drill',
-            drill_type ||
-              'group_drill',
-            '--group_id',
-            group_id ||
-              'Group_Alpha',
-            '--roster_json',
-            JSON.stringify(
-              registeredPlayersDb
-            )
-          ]
-        );
-
-      pythonProcess.stdout.on(
-        'data',
-        (data) =>
-          console.log(
-            `[GROUP CV STDOUT]: ${data.toString()}`
-          )
+      setAvailableDrills(
+        Array.from(drillsSet)
       );
 
-      pythonProcess.stderr.on(
-        'data',
-        (data) =>
+      setAvailableGroups(
+        Array.from(groupsSet)
+      );
+    }, []);
+
+  // ------------------------------------------------------------
+  // FETCH LEADERBOARD
+  // ------------------------------------------------------------
+
+  const fetchLeaderboard =
+    useCallback(
+      async (showLoader = true) => {
+        if (showLoader) {
+          setLoading(true);
+        }
+
+        setIsRefreshing(true);
+
+        try {
+          let endpoint =
+            `${API_BASE_URL}/api/leaderboard?date=` +
+            encodeURIComponent(
+              todayDateStr
+            );
+
+          if (activeTab === "group") {
+            endpoint +=
+              `&group_id=${encodeURIComponent(
+                selectedGroup
+              )}`;
+          }
+
+          const response =
+            await fetch(endpoint);
+
+          if (response.ok) {
+            const data =
+              await response.json();
+
+            const rawContent =
+              data.leaderboard ||
+              data.leaderboardFeed ||
+              data.analytics ||
+              data;
+
+            const normalizedFeed =
+              normalizePayloadToSessions(
+                rawContent
+              );
+
+            if (
+              normalizedFeed.length > 0
+            ) {
+              setLeaderboardFeed(
+                normalizedFeed
+              );
+
+              extractFilterOptions(
+                normalizedFeed
+              );
+
+              return;
+            }
+          }
+
+          const cacheResponse =
+            await fetch(
+              "/coach_intel_cache.json"
+            );
+
+          if (cacheResponse.ok) {
+            const cacheData =
+              await cacheResponse.json();
+
+            const fallbackFeed =
+              normalizePayloadToSessions(
+                cacheData.leaderboardFeed ||
+                  cacheData.rankings ||
+                  cacheData
+              );
+
+            setLeaderboardFeed(
+              fallbackFeed
+            );
+
+            extractFilterOptions(
+              fallbackFeed
+            );
+          } else {
+            setLeaderboardFeed([]);
+          }
+        } catch (error) {
           console.error(
-            `[GROUP CV STDERR]: ${data.toString()}`
-          )
-      );
+            "Error fetching leaderboard payload:",
+            error
+          );
 
-    } catch (err) {
-      console.error(
-        `❌ [GROUP DRILL ERROR]: ${err.message}`
-      );
-
-      return res.status(500).json({
-        success: false,
-        error: err.message
-      });
-    }
-  }
-);
-
-// ========================================================================
-// 🏆 FETCH GLOBAL LEADERBOARD DATA
-// ========================================================================
-
-app.get(
-  '/api/leaderboard',
-  async (req, res) => {
-    try {
-      // Pointing to the correct singular collection name
-      const snapshot = await firestoreDb.collection('leaderboard').get();
-      
-      const leaderboard = snapshot.docs.map(doc => {
-        const data = doc.data();
-        let rawDrill = data.drill_type || data.drillType || 'General Drill';
-        
-        let normalizedDrill = rawDrill;
-        if (rawDrill.toLowerCase().includes('slalom') || rawDrill.toLowerCase().includes('left_foot')) {
-          normalizedDrill = 'left_foot_slalom';
+          setLeaderboardFeed([]);
+        } finally {
+          setLoading(false);
+          setIsRefreshing(false);
         }
+      },
+      [
+        activeTab,
+        selectedGroup,
+        todayDateStr,
+        normalizePayloadToSessions,
+        extractFilterOptions,
+      ]
+    );
 
-        return {
-          id: doc.id,
-          playerName: data.player_name || data.playerName || data.name || 'Unknown Player',
-          score: data.score || data.ovr_score || data.overallRating || 0,
-          sprintAccel: data.sprintAccel || data.sprint_accel || 0,
-          passAccuracy: data.passAccuracy || data.pass_acc || 0,
-          controlPrecision: data.controlPrecision || data.control_precision || 0,
-          drill_type: normalizedDrill,
-          drillType: normalizedDrill,
-          createdAt: data.createdAt || data.created_at || new Date().toISOString(),
-          ...data
-        };
-      });
+  useEffect(() => {
+    fetchLeaderboard(true);
+  }, [fetchLeaderboard]);
 
-      // Sort descending by highest score
-      leaderboard.sort((a, b) => b.score - a.score);
+  const filteredSessions =
+    useMemo(() => {
+      const normalizedSearch =
+        searchTerm
+          .trim()
+          .toLowerCase();
 
-      res.json({
-        success: true,
-        leaderboard: leaderboard
-      });
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-        error: err.message
-      });
-    }
+      return leaderboardFeed
+        .map((session) => {
+          const sessionDrillName =
+            session.drill_name ||
+            session.drill_id ||
+            "Completed Drill";
+
+          const sessionDrillId =
+            session.drill_id ||
+            session.drill_name ||
+            "";
+
+          const normalizedSessionDrill = String(sessionDrillName).toLowerCase().replace(/[_-\s]/g, "");
+          const normalizedSessionId = String(sessionDrillId).toLowerCase().replace(/[_-\s]/g, "");
+          const normalizedSelectedDrill = String(selectedDrillType).toLowerCase().replace(/[_-\s]/g, "");
+
+          const matchesDrillFilter =
+            selectedDrillType === "all" ||
+            normalizedSessionDrill === normalizedSelectedDrill ||
+            normalizedSessionId === normalizedSelectedDrill ||
+            normalizedSessionDrill.includes(normalizedSelectedDrill) ||
+            normalizedSelectedDrill.includes(normalizedSessionDrill) ||
+            normalizedSessionId.includes(normalizedSelectedDrill);
+
+          if (!matchesDrillFilter) {
+            return null;
+          }
+
+          const playersList =
+            (
+              session.players || []
+            ).filter((player) => {
+              const playerGroup =
+                player.group_id ||
+                player.squad ||
+                "default_group";
+
+              const normalizedPlayerGroup = String(playerGroup).toLowerCase().replace(/[_-\s]/g, "");
+              const normalizedSelectedGroup = String(selectedGroup).toLowerCase().replace(/[_-\s]/g, "");
+
+              const matchesGroup =
+                activeTab === "global" ||
+                normalizedPlayerGroup === normalizedSelectedGroup ||
+                normalizedPlayerGroup.includes(normalizedSelectedGroup);
+
+              const playerName =
+                player.player_name ||
+                player.name ||
+                player.player_id ||
+                player.id ||
+                "";
+
+              const matchesSearch =
+                !normalizedSearch ||
+                String(playerName)
+                  .toLowerCase()
+                  .includes(
+                    normalizedSearch
+                  ) ||
+                sessionDrillName
+                  .toLowerCase()
+                  .includes(
+                    normalizedSearch
+                  );
+
+              return (
+                matchesGroup &&
+                matchesSearch
+              );
+            });
+
+          if (
+            playersList.length === 0
+          ) {
+            return null;
+          }
+
+          return {
+            ...session,
+            players: playersList,
+          };
+        })
+        .filter(Boolean);
+    }, [
+      leaderboardFeed,
+      searchTerm,
+      activeTab,
+      selectedGroup,
+      selectedDrillType,
+    ]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-lg font-semibold">
+            Loading Campus Leaderboard...
+          </div>
+
+          <div className="text-sm text-slate-500 mt-2">
+            Loading real-time performance metrics
+          </div>
+        </div>
+      </div>
+    );
   }
-);
 
-// ========================================================================
-// 🚪 FETCH SELECTED PLAYER'S MATCH ROOM HISTORY
-// ========================================================================
+  return (
+    <div className="min-h-screen bg-slate-950 text-white p-6">
+      <div className="max-w-7xl mx-auto">
 
-app.get(
-  '/api/player-room/:playerId',
-  async (req, res) => {
-    const { playerId } = req.params;
+        {/* HEADER */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white">
+              Campus Leaderboard
+            </h1>
 
-    try {
-      const snapshot = await firestoreDb.collection('daily_reports')
-        .where('player_id', '==', playerId)
-        .get();
+            <p className="text-sm text-slate-400 mt-1">
+              Real-time performance metrics and
+              session rankings
+            </p>
+          </div>
 
-      const reports = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          created_at: data.created_at || data.createdAt || data.date_created || new Date().toISOString(),
-          ...data
-        };
-      });
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) =>
+                setSearchTerm(
+                  e.target.value
+                )
+              }
+              placeholder="Search athlete or drill..."
+              className="bg-slate-900 border border-slate-800 text-sm rounded-lg px-3 py-2 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            />
 
-      res.json({
-        success: true,
-        reports: reports || []
-      });
-    } catch (err) {
-      res.json({
-        success: true,
-        reports: []
-      });
-    }
-  }
-);
-// ========================================================================
-// 🛡️ DYNAMIC SQUADS CONFIGURATION ENDPOINT
-// ========================================================================
+            <button
+              type="button"
+              onClick={() =>
+                fetchLeaderboard(false)
+              }
+              disabled={isRefreshing}
+              className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-sm font-medium px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isRefreshing
+                ? "Refreshing..."
+                : "Refresh"}
+            </button>
+          </div>
+        </div>
 
-app.get('/api/squads', async (req, res) => {
-  try {
-    const snapshot = await firestoreDb.collection('squads').get();
-    let squads = snapshot.docs.map(doc => doc.data().name || doc.id);
+        {/* TABS */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-2 mb-6 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              setActiveTab("global")
+            }
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition ${
+              activeTab === "global"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            Global Rankings
+          </button>
 
-    if (squads.length === 0) {
-      const leaderSnapshot = await firestoreDb.collection('leaderboard').get();
-      const groupSet = new Set();
-      leaderSnapshot.docs.forEach(doc => {
-        const data = doc.data();
-        if (data.group_id) groupSet.add(data.group_id);
-      });
-      squads = Array.from(groupSet);
-    }
+          <button
+            type="button"
+            onClick={() =>
+              setActiveTab("group")
+            }
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition ${
+              activeTab === "group"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            Group Filter
+          </button>
+        </div>
 
-    if (squads.length === 0) {
-      squads = ["Group A", "Group B", "Group C", "Group D"];
-    }
+        {/* FILTERS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {activeTab === "group" && (
+            <label className="block">
+              <span className="block text-xs font-bold text-slate-400 mb-2">
+                Squad
+              </span>
 
-    res.json({
-      success: true,
-      squads: squads
-    });
-  } catch (err) {
-    console.error('Error fetching dynamic squads:', err);
-    res.json({
-      success: true,
-      squads: ["Group A", "Group B", "Group C", "Group D"]
-    });
-  }
-});
+              <select
+                value={selectedGroup}
+                onChange={(e) =>
+                  setSelectedGroup(
+                    e.target.value
+                  )
+                }
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500"
+              >
+                {availableGroups.map(
+                  (group) => (
+                    <option
+                      key={group}
+                      value={group}
+                    >
+                      {group}
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+          )}
 
-// ========================================================================
-// SERVER LISTEN STARTUP
-// ========================================================================
+          <label className="block">
+            <span className="block text-xs font-bold text-slate-400 mb-2">
+              Drill
+            </span>
 
-const PORT = process.env.PORT || 8000;
-server.listen(PORT, () => {
-  console.log(`🚀 [EXPRESS SERVER RUNNING] Listening on port ${PORT}`);
-});
+            <select
+              value={selectedDrillType}
+              onChange={(e) =>
+                setSelectedDrillType(
+                  e.target.value
+                )
+              }
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500"
+            >
+              <option value="all">
+                All Drills
+              </option>
+
+              {AVAILABLE_DRILLS.map(
+                (drill) => (
+                  <option
+                    key={drill.id}
+                    value={drill.id}
+                  >
+                    {drill.label}
+                  </option>
+                )
+              )}
+            </select>
+          </label>
+        </div>
+
+        {/* LEADERBOARD FEED */}
+        {filteredSessions.length ===
+        0 ? (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center">
+            <div className="text-slate-300 font-medium">
+              No performance records found
+              matching your active filters.
+            </div>
+
+            <div className="text-sm text-slate-500 mt-2">
+              Try changing the drill, group,
+              or search filter.
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {filteredSessions.map(
+              (session, sIdx) => {
+                const sortedPlayers =
+                  [...session.players].sort(
+                    (a, b) =>
+                      (
+                        b.score ??
+                        b.metric ??
+                        b.performance ??
+                        b.highest_ovr ??
+                        b.ovr_score ??
+                        0
+                      ) -
+                      (
+                        a.score ??
+                        a.metric ??
+                        a.performance ??
+                        a.highest_ovr ??
+                        a.ovr_score ??
+                        0
+                      )
+                  );
+
+                const currentDrillName = session.drill_name || session.drill_id || "Completed Drill";
+
+                return (
+                  <div
+                    key={
+                      session.drill_id ||
+                      session.drill_name ||
+                      `session-${sIdx}`
+                    }
+                    className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"
+                  >
+                    <div className="px-5 py-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                      <div>
+                        <h2 className="text-lg font-semibold text-white">
+                          {currentDrillName}
+                        </h2>
+
+                        <p className="text-sm text-slate-500 mt-1">
+                          Session Date:{" "}
+                          {session.date ||
+                            todayDateStr}
+                        </p>
+                      </div>
+
+                      <div className="text-sm text-slate-400">
+                        {
+                          session.players
+                            .length
+                        }{" "}
+                        Athletes Ranked
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-left text-slate-500">
+                            <th className="px-5 py-3 font-medium">
+                              Rank
+                            </th>
+
+                            <th className="px-5 py-3 font-medium">
+                              Athlete
+                            </th>
+
+                            <th className="px-5 py-3 font-medium">
+                              Group
+                            </th>
+
+                            <th className="px-5 py-3 font-medium">
+                              Score / Metric
+                            </th>
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {sortedPlayers.map(
+                            (
+                              player,
+                              pIdx
+                            ) => {
+                              const playerId =
+                                player.player_id ||
+                                player.id ||
+                                player.player_name ||
+                                player.name;
+
+                              const playerName =
+                                player.player_name ||
+                                player.name ||
+                                "Unknown Athlete";
+
+                              const playerGroup =
+                                player.group_id ||
+                                player.squad ||
+                                "default_group";
+
+                              const playerScore =
+                                player.score ??
+                                player.metric ??
+                                player.performance ??
+                                player.highest_ovr ??
+                                player.ovr_score ??
+                                0;
+
+                              return (
+                                <tr
+                                  key={
+                                    playerId ||
+                                    `${sIdx}-${pIdx}`
+                                  }
+                                  onClick={() =>
+                                    handlePlayerRowClick(
+                                      playerId,
+                                      player,
+                                      currentDrillName
+                                    )
+                                  }
+                                  className="border-b border-slate-800/70 hover:bg-slate-800/50 cursor-pointer transition"
+                                >
+                                  <td className="px-5 py-4 text-slate-400 font-medium">
+                                    #{pIdx + 1}
+                                  </td>
+
+                                  <td className="px-5 py-4">
+                                    <div className="font-medium text-white hover:text-indigo-400 underline transition">
+                                      {playerName}
+                                    </div>
+
+                                    {playerId && (
+                                      <div className="text-xs text-slate-500 mt-1">
+                                        ID:{" "}
+                                        {playerId}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  <td className="px-5 py-4 text-slate-400">
+                                    {playerGroup}
+                                  </td>
+
+                                  <td className="px-5 py-4">
+                                    <span className="font-semibold text-white">
+                                      {playerScore}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            }
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              }
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
