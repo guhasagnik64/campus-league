@@ -7,6 +7,7 @@ from datetime import datetime
 import os
 import subprocess
 import sqlite3
+import threading
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
@@ -125,7 +126,18 @@ def upload_file():
             "--facility_type", facility_type,
             "--entity_id", player_name
         ]
-        subprocess.Popen(cmd)
+        
+        def run_cv():
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True)
+                if res.returncode != 0:
+                    print(f"[CV ENGINE ERROR]: {res.stderr}")
+                else:
+                    print(f"[CV ENGINE SUCCESS]: {res.stdout}")
+            except Exception as ex:
+                print(f"[CV ENGINE EXCEPTION]: {ex}")
+                
+        threading.Thread(target=run_cv, daemon=True).start()
         
         return jsonify({'status': 'processing', 'file': file.filename}), 200
     except Exception as e:
