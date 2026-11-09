@@ -104,73 +104,52 @@ export default function GlobalCampusLeaderboard({
   };
 
   // ------------------------------------------------------------
-  // NORMALIZE LEADERBOARD PAYLOAD
+  // NORMALIZE LEADERBOARD PAYLOAD (Group flat players by drill)
   // ------------------------------------------------------------
 
   const normalizePayloadToSessions =
     useCallback(
       (rawPayload) => {
-        if (!rawPayload) {
+        if (!rawPayload || (Array.isArray(rawPayload) && rawPayload.length === 0)) {
           return [];
         }
 
-        if (
-          Array.isArray(rawPayload) &&
-          rawPayload.length === 0
-        ) {
-          return [];
-        }
-
-        if (
-          Array.isArray(rawPayload) &&
-          rawPayload[0]?.players
-        ) {
+        // Case 1: Already structured as sessions array
+        if (Array.isArray(rawPayload) && rawPayload[0]?.players) {
           return rawPayload;
         }
 
-        if (
-          typeof rawPayload === "object" &&
-          !Array.isArray(rawPayload) &&
-          rawPayload.players
-        ) {
+        // Case 2: Object with players array
+        if (typeof rawPayload === "object" && !Array.isArray(rawPayload) && rawPayload.players) {
           return [
             {
-              drill_id:
-                rawPayload.drill_id ||
-                rawPayload.drill_name ||
-                "drill_session",
-
-              drill_name:
-                rawPayload.drill_name ||
-                rawPayload.drill_id ||
-                "Training Session",
-
-              date:
-                rawPayload.date ||
-                todayDateStr,
-
-              players:
-                rawPayload.players,
+              drill_id: rawPayload.drill_id || rawPayload.drill_name || "left_foot_slalom",
+              drill_name: rawPayload.drill_name || rawPayload.drill_id || "Left Foot Outside Cut Slalom",
+              date: rawPayload.date || todayDateStr,
+              players: rawPayload.players,
             },
           ];
         }
 
+        // Case 3: Flat array of player records directly from /api/leaderboard
         if (Array.isArray(rawPayload)) {
-          return [
-            {
-              drill_id:
-                "drill_session",
+          const sessionsMap = {};
 
-              drill_name:
-                "Active Campus Drill",
+          rawPayload.forEach((player) => {
+            const rawDrill = player.drill_type || player.drillType || player.drill_id || player.drillName || "left_foot_slalom";
+            
+            if (!sessionsMap[rawDrill]) {
+              sessionsMap[rawDrill] = {
+                drill_id: rawDrill,
+                drill_name: player.drillName || player.drill_name || "Left Foot Outside Cut Slalom",
+                date: player.date || player.created_at || player.createdAt || todayDateStr,
+                players: []
+              };
+            }
+            sessionsMap[rawDrill].players.push(player);
+          });
 
-              date:
-                todayDateStr,
-
-              players:
-                rawPayload,
-            },
-          ];
+          return Object.values(sessionsMap);
         }
 
         return [];
