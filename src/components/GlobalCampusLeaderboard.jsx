@@ -8,7 +8,7 @@ import React, {
 import { useNavigate } from "react-router-dom";
 import { AVAILABLE_DRILLS } from "../utils/drills";
 
-const API_BASE_URL = "https://campus-league-7sfl.onrender.com/api/v1/league/leaderboard";
+const API_BASE_URL = "https://campus-league-7sfl.onrender.com";
 
 export default function GlobalCampusLeaderboard({
   onSelectPlayer,
@@ -223,8 +223,8 @@ export default function GlobalCampusLeaderboard({
         setIsRefreshing(true);
 
         try {
-          let endpoint =
-            `${API_BASE_URL}/api/leaderboard?date=` +
+         let endpoint =
+            `${API_BASE_URL}/api/v1/league/leaderboard?date=` +
             encodeURIComponent(
               todayDateStr
             );
@@ -236,7 +236,7 @@ export default function GlobalCampusLeaderboard({
               )}`;
           }
 
-          const response =
+           const response  =
             await fetch(endpoint);
 
           if (response.ok) {
