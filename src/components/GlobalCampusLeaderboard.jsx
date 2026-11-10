@@ -8,7 +8,7 @@ import React, {
 import { useNavigate } from "react-router-dom";
 import { AVAILABLE_DRILLS } from "../utils/drills";
 
-const API_BASE_URL = "https://campus-league-7sfl.onrender.com";
+const API_BASE_URL = "https://campus-league-7sfl.onrender.com/api/v1/league/leaderboard";
 
 export default function GlobalCampusLeaderboard({
   onSelectPlayer,
