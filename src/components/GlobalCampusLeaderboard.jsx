@@ -223,11 +223,7 @@ export default function GlobalCampusLeaderboard({
         setIsRefreshing(true);
 
         try {
-         let endpoint =
-            `${API_BASE_URL}/api/v1/league/leaderboard?date=` +
-            encodeURIComponent(
-              todayDateStr
-            );
+         let endpoint = `${API_BASE_URL}/api/v1/league/leaderboard`;
 
           if (activeTab === "group") {
             endpoint +=
