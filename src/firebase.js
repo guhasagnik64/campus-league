@@ -6,7 +6,7 @@ import {
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Unique Siliguri hub configuration[cite: 21]
+// Unique Siliguri hub configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBJU_pSEsR-44WsaelEbXroZBoqcWVfjWM",
   authDomain: "campus-league-5cac1.firebaseapp.com",
@@ -16,7 +16,7 @@ const firebaseConfig = {
   appId: "1:831540710409:web:d99a33e24bf0dbb0913cd8"
 };
 
-// Initialize Firebase App[cite: 21]
+// Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with explicit long-polling and multi-tab persistent cache
@@ -27,5 +27,5 @@ export const db = initializeFirestore(app, {
   })
 });
 
-// Storage Export[cite: 21]
+// Storage Export
 export const storage = getStorage(app);
