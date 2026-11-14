@@ -865,7 +865,7 @@ def analyze_left_foot_outside_cut(frame_data):
         
     return {
         "player_id": player_id,
-        "drill": "Left Foot Outside Cut",
+        "drill": "ft_foot_outside_cut",
         "score": max(0, min(100, final_score)),
         "passing_accuracy": 85.0,
         "sprint_acceleration_rate": 80.0,
@@ -876,7 +876,7 @@ def analyze_left_foot_outside_cut(frame_data):
 def run_drill_analysis(drill, frame_data, group_id=None):
     """Unified drill router: dispatches to specialized drill analyzers
     or the dynamic rules engine."""
-    if drill == "left_foot_outside_cut":
+    if drill in ("ft_foot_outside_cut", "left_foot_outside_cut"):
         return analyze_left_foot_outside_cut(frame_data)
     if drill == "dribbling":
         return analyze_dribbling(frame_data)
