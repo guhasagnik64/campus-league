@@ -9,4 +9,12 @@ serviceAccountKey.json
 *.db
 *.sqlite
 .claude/
+.envpractice_intel.db
+serviceAccountKey.json
+firebase_credentials.json
 .env
+uploads/
+videos/
+
+__pycache__/
+*.pyc

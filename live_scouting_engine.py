@@ -24,7 +24,7 @@ try:
     from firebase_admin import credentials, firestore
     if not firebase_admin._apps:
         try:
-            cred = credentials.Certificate("serviceAccountKey.json")
+            cred = credentials.Certificate(os.getenv("FIREBASE_CREDENTIALS", "serviceAccountKey.json"))
             firebase_admin.initialize_app(cred)
             db = firestore.client()
         except Exception as e:
@@ -62,15 +62,15 @@ except ImportError:
 
 # --- DYNAMIC DRILL RULE RETRIEVAL ---
 def get_drill_rules(drill_id):
-    conn = sqlite3.connect('practice_intel.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT rules_json FROM drills WHERE id = ?", (drill_id,))
-    row = cursor.fetchone()
-    conn.close()
-    
-    if row:
-        return json.loads(row[0])
-    
+    try:
+        conn = sqlite3.connect('practice_intel.db')
+        row = conn.execute("SELECT rules_json FROM drills WHERE id = ?", (drill_id,)).fetchone()
+        conn.close()
+        if row:
+            return json.loads(row[0])
+    except sqlite3.Error as e:
+        print(f"[RULES WARNING] drills table unavailable, using defaults: {e}", flush=True)
+
     # Fallback default rule set if drill is not found
     return {
         "drill_name": drill_id,
@@ -135,6 +135,8 @@ facility_type = "CASUAL_FUTSAL" # Options: "CASUAL_FUTSAL" | "ACADEMY"
 session_mode = "CASUAL_FUTSAL" # Options: "CASUAL_FUTSAL" | "ACADEMY_TRAINING"
 target_player_name = "SA" # Default target player name
 player_tags = [] # Extracted player tags parameter from Express API
+target_player_id = None # Stable app player ID (e.g. user_1793429157605) used as the Firestore doc ID
+_seen_box_errors = set() # De-duplicates per-detection error logging
 
 if len(sys.argv) > 1:
     for i in range(len(sys.argv)):
@@ -144,6 +146,8 @@ if len(sys.argv) > 1:
             drill_format = sys.argv[i+1]
         if sys.argv[i] == '--player' and i + 1 < len(sys.argv):
             target_player_name = sys.argv[i+1]
+        if sys.argv[i] in ('--entity_id', '--player_id') and i + 1 < len(sys.argv):
+            target_player_id = sys.argv[i+1]
         if sys.argv[i] == '--player_tags' and i + 1 < len(sys.argv):
             raw_tags = sys.argv[i+1]
             try:
@@ -215,7 +219,8 @@ def init_db():
         'goals': 'INTEGER DEFAULT 0',
         'top_speed': 'REAL DEFAULT 0.0',
         'is_published': 'INTEGER DEFAULT 0',
-        'video_url': 'TEXT'
+        'video_url': 'TEXT',
+        'player_name': 'TEXT'
     }
     for col_name, col_def in new_cols.items():
         if col_name not in existing_columns:
@@ -654,6 +659,10 @@ try:
                     tracked_entities[assigned_id] = current_pos
 
                 except Exception as single_box_err:
+                    _msg = f"{type(single_box_err).__name__}: {single_box_err}"
+                    if _msg not in _seen_box_errors:
+                        _seen_box_errors.add(_msg)
+                        print(f"[BOX ERROR] {_msg}", flush=True)
                     continue
             
             # Store frame telemetry for multi-group analytics aggregation
@@ -782,6 +791,54 @@ finally:
                 pass_accuracy=dynamic_pass_acc,
                 sprint_speed=round(real_top_speed, 1)
             )
+
+            # --- PUBLISH SCORECARD (Firestore + local DB read by the REST leaderboard/scorecard routes) ---
+            coach_text = ai_coach_report
+            if not coach_text or str(coach_text).startswith(("GenAI client", "AI generation error")):
+                coach_text = "Session analysed. Keep building on your touch and movement."
+
+            # Assumption: the cluster with the most detections is the uploading player.
+            is_target = bool(target_player_id) and cluster is clusters[0]
+            publish_id = target_player_id if is_target else display_name
+            publish_name = target_player_name if (is_target and target_player_name not in ("SA", "")) else display_name
+            drill_label = drill_format.replace("_", " ").title()
+
+            try:
+                from drill_analytics import save_analysis_to_firestore
+                published = save_analysis_to_firestore(
+                    {
+                        "player_name": publish_name,
+                        "drill": drill_format,
+                        "score": dynamic_ovr,
+                        "passing_accuracy": dynamic_pass_acc,
+                        "sprint_acceleration_rate": round(real_top_speed, 1),
+                        "coach_feedback": [coach_text],
+                        "written_breakdown": coach_text,
+                    },
+                    player_id=publish_id,
+                    group_id=tenant_id,
+                )
+                print(f"[FIRESTORE PUBLISH] {publish_id}: {published}", flush=True)
+            except Exception as publish_err:
+                print(f"[FIRESTORE PUBLISH ERROR] {publish_id}: {publish_err}", flush=True)
+
+            try:
+                _sc = sqlite3.connect('practice_intel.db')
+                _sc.execute(
+                    """INSERT INTO live_analytics
+                       (tenant_id, facility_type, timestamp, entity_id, player_name, metric_event,
+                        velocity_score, technical_score, suggestion, video_url, ovr_rating, goals,
+                        top_speed, is_published)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1)""",
+                    (tenant_id, facility_type, today_str, publish_id, publish_name, drill_label,
+                     real_top_speed, dynamic_ovr, str(coach_text)[:500], output_video_path,
+                     dynamic_ovr, real_top_speed)
+                )
+                _sc.commit()
+                _sc.close()
+                print(f"[LOCAL SCORECARD SAVED] {publish_id}", flush=True)
+            except sqlite3.Error as local_err:
+                print(f"[LOCAL SCORECARD ERROR] {publish_id}: {local_err}", flush=True)
 
             leaderboard_payload = {
                 "playerId": display_name,

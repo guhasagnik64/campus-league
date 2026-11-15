@@ -36,7 +36,7 @@ def sync_local_to_json(tenant_id="default_facility"):
 
         # Calculate 3-hour expiration window
         created_at = datetime.now(timezone.utc)
-        expires_at = (created_at + timedelta(hours=3)).isoformat() + "Z"
+        expires_at = (created_at + timedelta(hours=3)).isoformat().replace("+00:00", "Z")
 
         individual_portals = {}
         for row in rows:
@@ -57,7 +57,7 @@ def sync_local_to_json(tenant_id="default_facility"):
             "coachReport": "Match Telemetry Complete. Share to Campus Feed before the countdown expires!",
             "sessionPoints": 250,
             "tenant_id": tenant_id,
-            "createdAt": created_at.isoformat() + "Z",
+            "createdAt": created_at.isoformat().replace("+00:00", "Z"),
             "expiresAt": expires_at,
             "isPublished": bool(rows[0][7]) if rows else False,
             "individualPortals": individual_portals,

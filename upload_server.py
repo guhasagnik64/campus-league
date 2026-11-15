@@ -73,7 +73,8 @@ def init_server_db(db_path="practice_intel.db"):
             "ovr_rating": "INTEGER DEFAULT 0",
             "goals": "INTEGER DEFAULT 0",
             "top_speed": "REAL DEFAULT 0.0",
-            "is_published": "INTEGER DEFAULT 0"
+            "is_published": "INTEGER DEFAULT 0",
+            "player_name": "TEXT"
         }
 
         for col_name, col_type in new_columns.items():
@@ -108,6 +109,8 @@ def upload_file():
         drill_id = request.form.get('drill_id', 'dribble_pass')
         drill_type = request.form.get('drill_type', 'passing')
         player_name = request.form.get('player_name', 'Sagnik Guha')
+        # Stable app ID (user_...) sent by the React upload; falls back to the name
+        player_id = request.form.get('player_id') or player_name
         tenant_id = request.form.get('tenant_id', 'default_facility')
         facility_type = request.form.get('facility_type', 'ACADEMY')
         
@@ -124,14 +127,15 @@ def upload_file():
             "--drill_type", drill_type,
             "--tenant_id", tenant_id,
             "--facility_type", facility_type,
-            "--entity_id", player_name
+            "--entity_id", player_id,
+            "--player", player_name
         ]
         
         def run_cv():
             try:
                 res = subprocess.run(cmd, capture_output=True, text=True)
                 if res.returncode != 0:
-                    print(f"[CV ENGINE ERROR]: {res.stderr}")
+                    print(f"[CV ENGINE ERROR] exit code {res.returncode} (-9 = killed, usually out of memory): {res.stderr}")
                 else:
                     print(f"[CV ENGINE SUCCESS]: {res.stdout}")
             except Exception as ex:
@@ -392,7 +396,54 @@ def get_squads():
 
 @app.route('/api/leaderboard', methods=['GET'])
 def get_leaderboard_by_date():
-    return get_public_leaderboard()
+    """Returns {"leaderboard": [session]} where each session is
+    {drill_id, drill_name, date, players: [...]} - the shape GlobalCampusLeaderboard expects."""
+    try:
+        wanted_date = request.args.get('date') or datetime.now().strftime("%Y-%m-%d")
+        conn = sqlite3.connect("practice_intel.db")
+        conn.row_factory = sqlite3.Row
+        query = """
+            SELECT entity_id, player_name, tenant_id, metric_event, ovr_rating,
+                   technical_score, top_speed, timestamp
+            FROM live_analytics
+            {where}
+            ORDER BY id DESC {limit}
+        """
+        rows = conn.execute(query.format(where="WHERE substr(timestamp, 1, 10) = ?", limit=""), (wanted_date,)).fetchall()
+        if not rows:  # nothing today: show the most recent results instead of an empty board
+            rows = conn.execute(query.format(where="", limit="LIMIT 50")).fetchall()
+        conn.close()
+
+        sessions, seen = {}, set()
+        for r in rows:
+            drill = r["metric_event"] or "Training Session"
+            if (drill, r["entity_id"]) in seen:
+                continue  # keep only each player's latest result per drill
+            seen.add((drill, r["entity_id"]))
+            score = r["ovr_rating"] if r["ovr_rating"] and r["ovr_rating"] > 0 else (r["technical_score"] or 0)
+            session = sessions.setdefault(drill, {
+                "drill_id": drill,
+                "drill_name": drill,
+                "date": (r["timestamp"] or wanted_date)[:10],
+                "players": []
+            })
+            session["players"].append({
+                "player_id": r["entity_id"],
+                "name": r["player_name"] or r["entity_id"],
+                "group_id": r["tenant_id"],
+                "ovr_score": score,
+                "top_speed": r["top_speed"]
+            })
+
+        for session in sessions.values():
+            session["players"].sort(key=lambda p: p["ovr_score"], reverse=True)
+            for rank, player in enumerate(session["players"], start=1):
+                player["rank"] = rank
+
+        return jsonify({"success": True, "leaderboard": list(sessions.values())}), 200
+    except Exception as e:
+        print(f"[LEADERBOARD ERROR] {e}")
+        return jsonify({"success": False, "error": str(e), "leaderboard": []}), 200
 
 
 @app.route('/api/upload-analysis', methods=['POST'])

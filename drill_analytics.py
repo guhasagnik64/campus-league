@@ -379,6 +379,21 @@ def save_analysis_to_firestore(
         # -------------------------------------------------------------
         # Make all NumPy values Firestore compatible
         # -------------------------------------------------------------
+        # -------------------------------------------------------------
+        # Mirror the field names/formats of the existing daily_reports docs
+        # (date_created, ovr_score, updatedAt, "70%" and "3.5 km/h" strings)
+        # -------------------------------------------------------------
+        ist = timezone(timedelta(hours=5, minutes=30))  # IST has no daylight saving
+        _pa = analysis_result.get("passing_accuracy")
+        _sp = analysis_result.get("sprint_acceleration_rate")
+        firestore_data["ovr_score"] = score
+        firestore_data["date_created"] = now.astimezone(ist).strftime("%d/%m/%Y")
+        firestore_data["updatedAt"] = firestore.SERVER_TIMESTAMP
+        if _pa is not None:
+            firestore_data["pass_accuracy"] = f"{round(float(_pa))}%"
+        if _sp is not None:
+            firestore_data["sprint_speed"] = f"{round(float(_sp), 1)} km/h"
+
         firestore_data = make_firestore_safe(
             firestore_data
         )
