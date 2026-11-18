@@ -708,12 +708,19 @@ const handleLaunchAnalysis = async () => {
 
     // Dynamically grabs whichever name property the logged-in user state holds
     const activePlayerName = user?.name || user?.displayName || user?.username || localStorage.getItem("userName") || "Logged Athlete";
+    
+    // Grab active player ID or fallback to profile ID
+    const activePlayerId = user?.id || localStorage.getItem("activePlayerId") || "user_1793429157605";
 
     try {
       const formData = new FormData();
       formData.append("file", selectedVideoFile);
       formData.append("drillType", selectedDrill);
       formData.append("playerName", activePlayerName);
+      
+      // 💡 ADD THIS LINE TO FIX THE ID MISMATCH:
+      formData.append("playerId", activePlayerId);
+      
       formData.append("coachId", user?.coachName || "Coach Tamal");
 
       let responseData = null;
