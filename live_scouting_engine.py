@@ -441,6 +441,13 @@ FRAME_SKIP_INTERVAL = 5
 INFERENCE_DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
 frame_idx = 0
 
+# Longest stretch of video to analyse, and the video's real frame rate (used for all timing below)
+MAX_ANALYSIS_SECONDS = 300
+src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+if src_fps != src_fps or src_fps <= 0:  # NaN / invalid guard
+    src_fps = 30.0
+max_frames = int(MAX_ANALYSIS_SECONDS * src_fps)
+
 try:
     while cap.isOpened():
         ret, frame = cap.read()
@@ -450,6 +457,9 @@ try:
             break
 
         frame_idx += 1
+        if frame_idx > max_frames:
+            print(f"[SYSTEM] Reached the {MAX_ANALYSIS_SECONDS}s analysis cap; stopping early.", flush=True)
+            break
         if frame_idx % FRAME_SKIP_INTERVAL != 0:
             continue
 
@@ -561,7 +571,7 @@ try:
                         displacement = float(np.sqrt((cx - prev_cx)**2 + (cy - prev_cy)**2))
                     
                     distance_meters = displacement * 0.025
-                    time_seconds = 0.1 * FRAME_SKIP_INTERVAL
+                    time_seconds = FRAME_SKIP_INTERVAL / src_fps  # real seconds between analysed frames
                     calculated_speed = (distance_meters / time_seconds) * 3.6 if time_seconds > 0 else 0.0
                     speed_kmh = round(min(calculated_speed, 36.0), 1)
 
@@ -583,7 +593,7 @@ try:
                     yolo_frame_data = {
                         'player_id': identity_marker,
                         'team_id': kit_label,
-                        'ball': (cx + 10, cy + 20),
+                        'ball': None,  # this engine does not detect the ball (see dribble_analysis.py)
                         'player_feet': (cx, y2),
                         'head_angle_deg': 45,
                         'shot_speed': max(60.0, speed_kmh * 2.5),
@@ -591,7 +601,7 @@ try:
                         'passing_accuracy': 85.0,
                         'reception_orientation': 80.0,
                         'lateral_displacement_px': displacement,
-                        'active_foot': "RIGHT" if cx % 2 == 0 else "LEFT"
+                        'active_foot': None  # not measured here (was derived from pixel parity)
                     }
 
                     # Fetch dynamic rules from database or evaluate via unified router
@@ -669,7 +679,7 @@ try:
             if current_frame_players:
                 accumulated_frame_history.append({
                     "frame_id": int(frame_idx),
-                    "timestamp": round(float(frame_idx * 0.1), 2),
+                    "timestamp": round(float(frame_idx / src_fps), 2),
                     "players": current_frame_players
                 })
 

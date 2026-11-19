@@ -94,6 +94,43 @@ init_server_db()
 # ==========================================
 # 1. UPLOADER & ANALYSIS ENDPOINTS
 # ==========================================
+# ==========================================
+# ENGINE SELECTION + ONE-ANALYSIS-AT-A-TIME QUEUE
+# ==========================================
+analysis_lock = threading.Semaphore(1)  # a second upload waits for its turn instead of loading the models twice
+
+
+def is_dribbling_drill(drill_id):
+    """Cone / slalom / dribbling drills use the real ball-and-cone analysis.
+    'dribble_pass' style drills stay on the original engine."""
+    d = (drill_id or "").lower()
+    if "pass" in d:
+        return False
+    return any(key in d for key in ("dribbl", "slalom", "outside_cut", "ft_foot", "cone"))
+
+
+def build_engine_cmd(save_path, drill_id, drill_type, tenant_id, facility_type, player_id, player_name):
+    if is_dribbling_drill(drill_id):
+        return [
+            "python3", "dribble_analysis.py",
+            "--video", save_path,
+            "--drill_name", drill_id,
+            "--tenant_id", tenant_id,
+            "--entity_id", player_id,
+            "--player", player_name
+        ]
+    return [
+        "python3", "live_scouting_engine.py",
+        "--video", save_path,
+        "--drill_name", drill_id,
+        "--drill_type", drill_type,
+        "--tenant_id", tenant_id,
+        "--facility_type", facility_type,
+        "--entity_id", player_id,
+        "--player", player_name
+    ]
+
+
 @app.route('/upload', methods=['POST', 'OPTIONS'])
 def upload_file():
     if request.method == 'OPTIONS':
@@ -120,26 +157,19 @@ def upload_file():
         print(f"[SUCCESS] Intercepted video asset directly to: {save_path}")
         
         # FIX: Include player_name as entity_id so results link to the correct profile
-        cmd = [
-            "python3", "live_scouting_engine.py", 
-            "--video", save_path,
-            "--drill_name", drill_id,
-            "--drill_type", drill_type,
-            "--tenant_id", tenant_id,
-            "--facility_type", facility_type,
-            "--entity_id", player_id,
-            "--player", player_name
-        ]
+        cmd = build_engine_cmd(save_path, drill_id, drill_type, tenant_id, facility_type, player_id, player_name)
+        print(f"[ENGINE SELECTED] {cmd[1]} for drill '{drill_id}'")
         
         def run_cv():
-            try:
-                res = subprocess.run(cmd, capture_output=True, text=True)
-                if res.returncode != 0:
-                    print(f"[CV ENGINE ERROR] exit code {res.returncode} (-9 = killed, usually out of memory): {res.stderr}")
-                else:
-                    print(f"[CV ENGINE SUCCESS]: {res.stdout}")
-            except Exception as ex:
-                print(f"[CV ENGINE EXCEPTION]: {ex}")
+            with analysis_lock:  # one analysis at a time
+                try:
+                    res = subprocess.run(cmd, capture_output=True, text=True)
+                    if res.returncode != 0:
+                        print(f"[CV ENGINE ERROR] exit code {res.returncode} (-9 = killed, usually out of memory): {res.stderr}")
+                    else:
+                        print(f"[CV ENGINE SUCCESS]: {res.stdout}")
+                except Exception as ex:
+                    print(f"[CV ENGINE EXCEPTION]: {ex}")
                 
         threading.Thread(target=run_cv, daemon=True).start()
         
