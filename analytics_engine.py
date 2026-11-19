@@ -142,14 +142,14 @@ def resolve_reid_identity_dynamic(crop_img, group_embeddings_db, threshold=0.45)
         return best_match, best_score
         
     return None, best_score
-
 # --- 4. MAIN COMPUTER VISION PIPELINE ---
 def process_drill_and_match_leaderboard(
     video_path,
     registered_players_db,
     player_visual_ids=None,
     group_id=None,
-    drill_title="Simultaneous Multi-Group Telemetry"
+    drill_title="Simultaneous Multi-Group Telemetry",
+    target_player_id=None # 👈 Add this parameter
 ):
     # ✅ Lazy load YOLO locally to avoid loading PyTorch during server startup
     from ultralytics import YOLO

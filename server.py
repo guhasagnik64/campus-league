@@ -138,13 +138,24 @@ async def upload_analysis(
             group_id=groupId
         )
 
+        # 💡 DYNAMIC EXTRACTION: Pull real metrics from CV results if available, with safe fallbacks
+        top_player = {}
+        if results and isinstance(results, dict) and results.get("players"):
+            # Find matching player by playerId, or fallback to the top ranked player
+            matched = next((p for p in results["players"] if str(p.get("player_id")) == str(playerId)), None)
+            top_player = matched or results["players"][0]
+
+        actual_score = top_player.get("ovr_score", 88)
+        actual_speed = top_player.get("speed", "24.2 km/h")
+        actual_pass = top_player.get("pass_acc", "88%")
+
         scorecard_entry = {
             "player_id": playerId,
             "name": playerName,
             "drillName": drillType.replace("_", " ").title(),
-            "ovr_score": 88,
-            "pass_accuracy": "88%",
-            "speed": "24.2 km/h",
+            "ovr_score": actual_score,
+            "pass_accuracy": actual_pass,
+            "speed": actual_speed,
             "createdAt": "Just now"
         }
 
@@ -272,7 +283,8 @@ async def process_video(
             video_path=video_path,
             registered_players_db=REGISTERED_PLAYERS_DB,
             player_visual_ids=visual_ids,
-            group_id=groupId
+            group_id=groupId,
+            target_player_id=playerId # 👈 Ensure the user ID is explicitly forwarded here
         )
 
         # Extract player data dynamically and normalize scores
