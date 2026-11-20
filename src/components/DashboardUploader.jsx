@@ -118,9 +118,9 @@ export default function DashboardUploader({ currentUser, setDrillStats }) {
       setIsAnalyzing(true);
       setStatus(`⏳ Analyzing session video & photo reference for ${videoFile.name}...`);
 
-      const response = await axios.post("http://localhost:8000/api/upload-analysis", formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const response = await axios.post("https://campus-league-7sfl.onrender.com/api/upload-analysis", formData, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+});
       const data = response.data;
 
       if (data.data && typeof setDrillStats === 'function') {
