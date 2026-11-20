@@ -727,10 +727,10 @@ const handleLaunchAnalysis = async () => {
 
       // Safe non-blocking fetch to backend API
       try {
-        const res = await fetch("http://localhost:8000/api/upload-analysis", {
-          method: "POST",
-          body: formData,
-        });
+        const res = await fetch("https://campus-league-7sfl.onrender.com/api/upload-analysis", {
+  method: "POST",
+  body: formData,
+});
 
         if (res.ok) {
           const contentType = res.headers.get("content-type");
