@@ -73,10 +73,10 @@ export default function DashboardUploader({ currentUser, setDrillStats }) {
     formData.append('group_id', executionMode === 'group' ? 'Group A' : 'Solo');
 
     try {
-      const response = await fetch('http://localhost:8000/api/players/register', {
-        method: 'POST',
-        body: formData,
-      });
+      const response = await fetch('https://campus-league-7sfl.onrender.com/api/players/register', {
+           method: 'POST',
+           body: formData,
+        });
       const data = await response.json();
       if (response.ok) {
         setStatus(`✅ Photo reference bound to ${playerName} under ${assignedCoach}!`);
