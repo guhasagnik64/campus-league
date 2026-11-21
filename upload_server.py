@@ -1,13 +1,21 @@
 # upload_server.py
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO
-from flask import send_from_directory
 from datetime import datetime
+import json
 import os
 import subprocess
 import sqlite3
 import threading
+
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+except ImportError:
+    firebase_admin = None
+    credentials = None
+    firestore = None
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
@@ -15,6 +23,7 @@ CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DB_PATH = os.path.join(BASE_DIR, "practice_intel.db")
 
 VIDEO_DIR = os.path.join(BASE_DIR, "my_cloud_space")
 STAMP_DIR = os.path.join(BASE_DIR, "public", "player_stamps")
@@ -22,19 +31,101 @@ STAMP_DIR = os.path.join(BASE_DIR, "public", "player_stamps")
 os.makedirs(VIDEO_DIR, exist_ok=True)
 os.makedirs(STAMP_DIR, exist_ok=True)
 
+
+# ------------------------------------------------------------------
+# FIREBASE / FIRESTORE CREDENTIAL LOADER (JSON STRING OR FILE PATH)
+# ------------------------------------------------------------------
+def init_firestore_client():
+    """
+    Loads Firebase credentials safely from:
+    1. A JSON string in FIREBASE_CREDENTIALS / FIREBASE_SERVICE_ACCOUNT_JSON /
+       GOOGLE_APPLICATION_CREDENTIALS_JSON / GOOGLE_APPLICATION_CREDENTIALS
+    2. An existing file path (including /etc/secrets/... or firebase_credentials.json)
+    Never passes a raw JSON string as a file path.
+    """
+    if firebase_admin is None or credentials is None or firestore is None:
+        print("[FIREBASE WARNING] firebase-admin not installed; Firestore sync disabled.")
+        return None
+
+    if firebase_admin._apps:
+        return firestore.client()
+
+    raw_candidates = [
+        os.environ.get("FIREBASE_CREDENTIALS", ""),
+        os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", ""),
+        os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON", ""),
+        os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", ""),
+    ]
+
+    for raw in raw_candidates:
+        val = (raw or "").strip()
+        if not val:
+            continue
+
+        # Case 1: Inline JSON string passed in environment variable
+        if val.startswith("{"):
+            try:
+                cred_dict = json.loads(val)
+                cred = credentials.Certificate(cred_dict)
+                firebase_admin.initialize_app(cred)
+                print("[FIREBASE] Initialized Firestore from JSON environment variable.")
+                return firestore.client()
+            except Exception as e:
+                print(f"[FIREBASE ERROR] Failed to parse JSON credentials from env: {e}")
+
+        # Case 2: Path to a credentials JSON file
+        candidate_path = val if os.path.isabs(val) else os.path.join(BASE_DIR, val)
+        if os.path.isfile(candidate_path):
+            try:
+                cred = credentials.Certificate(candidate_path)
+                firebase_admin.initialize_app(cred)
+                print(f"[FIREBASE] Initialized Firestore from file: {candidate_path}")
+                return firestore.client()
+            except Exception as e:
+                print(f"[FIREBASE ERROR] Failed loading credentials file '{candidate_path}': {e}")
+
+    default_file = os.path.join(BASE_DIR, "firebase_credentials.json")
+    if os.path.isfile(default_file):
+        try:
+            cred = credentials.Certificate(default_file)
+            firebase_admin.initialize_app(cred)
+            print(f"[FIREBASE] Initialized Firestore from {default_file}")
+            return firestore.client()
+        except Exception as e:
+            print(f"[FIREBASE ERROR] Failed loading {default_file}: {e}")
+
+    print("[FIREBASE WARNING] No valid credentials file or JSON env var found; Firestore history saving is disabled.")
+    return None
+
+
+db_firestore = init_firestore_client()
+
+
+def sync_to_firestore(collection_name, doc_id, payload):
+    if db_firestore is None:
+        return
+    try:
+        doc_ref = db_firestore.collection(collection_name)
+        if doc_id:
+            doc_ref.document(str(doc_id)).set(payload, merge=True)
+        else:
+            doc_ref.add(payload)
+    except Exception as e:
+        print(f"[FIRESTORE SYNC ERROR] collection='{collection_name}': {e}")
+
+
 # ------------------------------------------------------------------
 # AUTOMATED SCHEMA VERIFICATION & MIGRATION ENGINE
 # ------------------------------------------------------------------
-def init_server_db(db_path="practice_intel.db"):
+def init_server_db(db_path=DB_PATH):
     """
-    Ensures table persistence and automatically migrates schema for 
+    Ensures table persistence and automatically migrates schema for
     multi-tenant scoping (tenant_id) and casual futsal metrics.
     """
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # 1. Ensure drill_templates table exists
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS drill_templates (
                 drill_name TEXT PRIMARY KEY,
@@ -43,7 +134,6 @@ def init_server_db(db_path="practice_intel.db"):
             )
         """)
 
-        # 2. Ensure live_analytics table exists with multi-tenant & performance columns
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS live_analytics (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,11 +149,21 @@ def init_server_db(db_path="practice_intel.db"):
                 ovr_rating INTEGER DEFAULT 0,
                 goals INTEGER DEFAULT 0,
                 top_speed REAL DEFAULT 0.0,
-                is_published INTEGER DEFAULT 0
+                is_published INTEGER DEFAULT 0,
+                player_name TEXT
             )
         """)
 
-        # 3. Dynamic migration check for existing databases
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS registered_players (
+                player_id TEXT PRIMARY KEY,
+                player_name TEXT,
+                group_id TEXT,
+                stamp_url TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         cursor.execute("PRAGMA table_info(live_analytics)")
         existing_columns = [column[1] for column in cursor.fetchall()]
 
@@ -88,16 +188,14 @@ def init_server_db(db_path="practice_intel.db"):
     except Exception as e:
         print(f"[DATABASE CRITICAL ERROR] Initialization/Migration failed: {e}")
 
+
 init_server_db()
 
 
 # ==========================================
 # 1. UPLOADER & ANALYSIS ENDPOINTS
 # ==========================================
-# ==========================================
-# ENGINE SELECTION + ONE-ANALYSIS-AT-A-TIME QUEUE
-# ==========================================
-analysis_lock = threading.Semaphore(1)  # a second upload waits for its turn instead of loading the models twice
+analysis_lock = threading.Semaphore(1)
 
 
 def is_dribbling_drill(drill_id):
@@ -131,6 +229,50 @@ def build_engine_cmd(save_path, drill_id, drill_type, tenant_id, facility_type, 
     ]
 
 
+@app.route('/api/players/register', methods=['POST', 'OPTIONS'])
+def register_player():
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    try:
+        player_id = request.form.get('player_id') or request.form.get('entity_id') or f"user_{int(datetime.now().timestamp() * 1000)}"
+        player_name = request.form.get('player_name') or request.form.get('name') or player_id
+        group_id = request.form.get('group_id') or request.form.get('tenant_id') or 'default_facility'
+
+        stamp_url = ""
+        if 'file' in request.files and request.files['file'].filename:
+            f = request.files['file']
+            stamp_path = os.path.join(STAMP_DIR, f.filename)
+            f.save(stamp_path)
+            stamp_url = f"/player_stamps/{f.filename}"
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO registered_players (player_id, player_name, group_id, stamp_url)
+            VALUES (?, ?, ?, ?)
+        """, (player_id, player_name, group_id, stamp_url))
+        conn.commit()
+        conn.close()
+
+        sync_to_firestore("players", player_id, {
+            "player_id": player_id,
+            "player_name": player_name,
+            "group_id": group_id,
+            "stamp_url": stamp_url,
+            "updated_at": datetime.utcnow().isoformat()
+        })
+
+        return jsonify({
+            "status": "success",
+            "player_id": player_id,
+            "player_name": player_name,
+            "group_id": group_id,
+            "stamp_url": stamp_url
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/upload', methods=['POST', 'OPTIONS'])
 def upload_file():
     if request.method == 'OPTIONS':
@@ -138,7 +280,7 @@ def upload_file():
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
-            
+
         file = request.files['file']
         if file.filename == '':
             return jsonify({'error': 'No file chosen'}), 400
@@ -146,37 +288,44 @@ def upload_file():
         drill_id = request.form.get('drill_id', 'dribble_pass')
         drill_type = request.form.get('drill_type', 'passing')
         player_name = request.form.get('player_name', 'Sagnik Guha')
-        # Stable app ID (user_...) sent by the React upload; falls back to the name
         player_id = request.form.get('player_id') or player_name
         tenant_id = request.form.get('tenant_id', 'default_facility')
         facility_type = request.form.get('facility_type', 'ACADEMY')
-        
-        # Save directly to VIDEO_DIR so the scouting engine can process it
+
         save_path = os.path.join(VIDEO_DIR, file.filename)
         file.save(save_path)
         print(f"[SUCCESS] Intercepted video asset directly to: {save_path}")
-        
-        # FIX: Include player_name as entity_id so results link to the correct profile
+
         cmd = build_engine_cmd(save_path, drill_id, drill_type, tenant_id, facility_type, player_id, player_name)
         print(f"[ENGINE SELECTED] {cmd[1]} for drill '{drill_id}'")
-        
+
         def run_cv():
-            with analysis_lock:  # one analysis at a time
+            with analysis_lock:
                 try:
                     res = subprocess.run(cmd, capture_output=True, text=True)
                     if res.returncode != 0:
                         print(f"[CV ENGINE ERROR] exit code {res.returncode} (-9 = killed, usually out of memory): {res.stderr}")
                     else:
                         print(f"[CV ENGINE SUCCESS]: {res.stdout}")
+                        sync_to_firestore("daily_reports", None, {
+                            "tenant_id": tenant_id,
+                            "facility_type": facility_type,
+                            "player_id": player_id,
+                            "player_name": player_name,
+                            "drill_id": drill_id,
+                            "drill_type": drill_type,
+                            "timestamp": datetime.utcnow().isoformat()
+                        })
                 except Exception as ex:
                     print(f"[CV ENGINE EXCEPTION]: {ex}")
-                
+
         threading.Thread(target=run_cv, daemon=True).start()
-        
+
         return jsonify({'status': 'processing', 'file': file.filename}), 200
     except Exception as e:
         print(f"[ERROR] Exception during video upload: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/upload', methods=['POST', 'OPTIONS'])
 def api_upload_alias():
@@ -184,17 +333,19 @@ def api_upload_alias():
         return jsonify({'status': 'ok'}), 200
     return upload_file()
 
+
 @app.route('/api/upload-drill', methods=['POST', 'OPTIONS'])
 def upload_drill_api():
     if request.method == 'OPTIONS':
         return jsonify({'status': 'ok'}), 200
     return upload_file()
 
+
 @app.route('/api/admin/analyze', methods=['POST'])
 def admin_analyze_session():
     if 'video' not in request.files:
         return jsonify({"error": "No video file uploaded"}), 400
-        
+
     video_file = request.files['video']
     drill_name = request.form.get('drill_name', 'Custom Drill')
     drill_type = request.form.get('drill_type', 'passing')
@@ -222,10 +373,10 @@ def admin_analyze_session():
             "--facility_type", facility_type,
             "--custom_prompt_rules", custom_prompt_rules
         ]
-        
-        print(f"[ADMIN EXECUTION] Spinning up live_scouting_engine sub-process...")
+
+        print("[ADMIN EXECUTION] Spinning up live_scouting_engine sub-process...")
         subprocess.run(cmd, check=True)
-        
+
         return jsonify({"status": "success", "message": f"Telemetry metrics tracked smoothly for tenant '{tenant_id}'."})
 
     except subprocess.CalledProcessError as e:
@@ -240,21 +391,21 @@ def admin_analyze_session():
 def publish_report():
     data = request.json or {}
     tenant_id = data.get('tenant_id', 'default_facility')
-    
+
     try:
-        conn = sqlite3.connect("practice_intel.db")
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            UPDATE live_analytics 
-            SET is_published = 1 
+            UPDATE live_analytics
+            SET is_published = 1
             WHERE tenant_id = ? AND facility_type = 'CASUAL_FUTSAL'
         """, (tenant_id,))
-        
+
         conn.commit()
         conn.close()
-        
-        print(f"🔒 [PERMANENT SAVE] Futsal report for tenant '{tenant_id}' published to Campus Feed.")
+
+        print(f"[PERMANENT SAVE] Futsal report for tenant '{tenant_id}' published to Campus Feed.")
         return jsonify({"status": "success", "message": "Report locked into feed!"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -268,7 +419,7 @@ def get_public_leaderboard():
     if request.method == 'OPTIONS':
         return jsonify({'status': 'ok'}), 200
     try:
-        conn = sqlite3.connect("practice_intel.db")
+        conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -303,7 +454,7 @@ def get_public_leaderboard():
 def get_private_scorecard(player_id):
     """Fetches detailed player analytical feedback with robust fallback data."""
     try:
-        conn = sqlite3.connect("practice_intel.db")
+        conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -315,7 +466,7 @@ def get_private_scorecard(player_id):
             LIMIT 1
         """, (player_id,))
         row = cursor.fetchone()
-        
+
         if not row:
             cursor.execute("""
                 SELECT entity_id, metric_event, velocity_score, technical_score, suggestion, ovr_rating, top_speed, video_url
@@ -324,7 +475,7 @@ def get_private_scorecard(player_id):
                 LIMIT 1
             """)
             row = cursor.fetchone()
-            
+
         conn.close()
 
         private_data = {
@@ -339,7 +490,7 @@ def get_private_scorecard(player_id):
         }
 
         return jsonify({"scorecard": private_data}), 200
-    except Exception as e:
+    except Exception:
         return jsonify({
             "scorecard": {
                 "player_id": player_id,
@@ -353,14 +504,15 @@ def get_private_scorecard(player_id):
             }
         }), 200
 
+
 @app.route('/api/player-report/', methods=['GET'])
 @app.route('/api/player-report/<path:player_id>', methods=['GET'])
 def get_player_report(player_id="Sagnik Guha"):
     try:
-        conn = sqlite3.connect("practice_intel.db")
+        conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
+
         cursor.execute("""
             SELECT entity_id, technical_score, velocity_score, ovr_rating, suggestion
             FROM live_analytics
@@ -386,11 +538,11 @@ def get_player_report(player_id="Sagnik Guha"):
 
         return jsonify({
             "player_id": row["entity_id"],
-            "drill_type": row["drill_type"] if "drill_type" in row.keys() and row["drill_type"] else "passing",
+            "drill_type": "passing",
             "metrics": {
-                "PAS": tech, 
-                "PAC": velo, 
-                "CON": 82, 
+                "PAS": tech,
+                "PAC": velo,
+                "CON": 82,
                 "MOV": 85
             },
             "ovr": ovr,
@@ -410,7 +562,7 @@ def get_player_match_report_alias(player_id="Sagnik Guha"):
 @app.route('/api/squads', methods=['GET'])
 def get_squads():
     try:
-        conn = sqlite3.connect("practice_intel.db")
+        conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("SELECT DISTINCT tenant_id FROM live_analytics")
@@ -430,7 +582,7 @@ def get_leaderboard_by_date():
     {drill_id, drill_name, date, players: [...]} - the shape GlobalCampusLeaderboard expects."""
     try:
         wanted_date = request.args.get('date') or datetime.now().strftime("%Y-%m-%d")
-        conn = sqlite3.connect("practice_intel.db")
+        conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         query = """
             SELECT entity_id, player_name, tenant_id, metric_event, ovr_rating,
@@ -440,7 +592,7 @@ def get_leaderboard_by_date():
             ORDER BY id DESC {limit}
         """
         rows = conn.execute(query.format(where="WHERE substr(timestamp, 1, 10) = ?", limit=""), (wanted_date,)).fetchall()
-        if not rows:  # nothing today: show the most recent results instead of an empty board
+        if not rows:
             rows = conn.execute(query.format(where="", limit="LIMIT 50")).fetchall()
         conn.close()
 
@@ -448,7 +600,7 @@ def get_leaderboard_by_date():
         for r in rows:
             drill = r["metric_event"] or "Training Session"
             if (drill, r["entity_id"]) in seen:
-                continue  # keep only each player's latest result per drill
+                continue
             seen.add((drill, r["entity_id"]))
             score = r["ovr_rating"] if r["ovr_rating"] and r["ovr_rating"] > 0 else (r["technical_score"] or 0)
             session = sessions.setdefault(drill, {
@@ -513,9 +665,9 @@ def book_futsal_slot():
     tenant_id = data.get('tenant_id', 'default_facility')
     slot_time = data.get('slot_time', '18:00')
     player_name = data.get('player_name', 'Campus Player')
-    
+
     try:
-        conn = sqlite3.connect("practice_intel.db")
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS futsal_bookings (
@@ -532,7 +684,7 @@ def book_futsal_slot():
         """, (tenant_id, slot_time, player_name))
         conn.commit()
         conn.close()
-        
+
         return jsonify({"status": "success", "message": f"Futsal slot successfully booked for {slot_time}!"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -544,13 +696,13 @@ def book_futsal_slot():
 @app.route('/api/coach/portfolio', methods=['GET'])
 def get_coach_portfolio():
     try:
-        conn = sqlite3.connect("practice_intel.db")
+        conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM live_analytics ORDER BY id DESC LIMIT 10")
         rows = cursor.fetchall()
         conn.close()
-        
+
         portfolio_data = [dict(row) for row in rows]
         return jsonify({
             "coach_name": "Head Coach",
@@ -565,15 +717,15 @@ def get_coach_portfolio():
 @app.route('/api/player-profile/', methods=['GET'])
 def get_player_profile(player_id=None):
     try:
-        conn = sqlite3.connect("practice_intel.db")
+        conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
+
         if player_id:
             cursor.execute("SELECT * FROM live_analytics WHERE entity_id = ? ORDER BY id DESC LIMIT 1", (player_id,))
         else:
             cursor.execute("SELECT * FROM live_analytics ORDER BY id DESC LIMIT 1")
-            
+
         row = cursor.fetchone()
         conn.close()
 
@@ -590,41 +742,39 @@ def get_player_profile(player_id=None):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ==========================================
-# PASTE NEW ROUTE HERE:
-# ==========================================
+
 @app.route('/api/player-room', methods=['GET'])
 @app.route('/api/player-room/', methods=['GET'])
 @app.route('/api/player-room/<path:player_id>', methods=['GET'])
 def get_player_room_reports(player_id="Sagnik Guha"):
     try:
-        conn = sqlite3.connect('practice_intel.db')
+        conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
+
         cursor.execute("""
             SELECT id, tenant_id, timestamp, entity_id, metric_event, velocity_score
             FROM live_analytics
             WHERE entity_id = ?
         """, (player_id,))
-        
+
         rows = cursor.fetchall()
         conn.close()
-        
+
         if not rows:
             return jsonify({"reports": []}), 200
-            
+
         return jsonify({"reports": [dict(row) for row in rows]}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-# ==========================================
-# FIX: UPLOAD QUERY ALIAS ROUTE
-# ==========================================
+
+
 @app.route('/api/upload', methods=['POST', 'GET', 'OPTIONS'])
 def api_upload_query_alias():
     if request.method == 'OPTIONS':
         return jsonify({'status': 'ok'}), 200
     return upload_file()
+
 
 if __name__ == '__main__':
     socketio.run(app, host="0.0.0.0", port=8000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
