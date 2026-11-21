@@ -27,10 +27,10 @@ def initialize_firestore():
     Initialize Firebase Admin SDK once.
 
     Credential lookup order:
-    1. FIREBASE_CREDENTIALS environment variable
-    2. firebase_credentials.json in the backend root
+    1. FIREBASE_CREDENTIALS env var (JSON string or file path)
+    2. /etc/secrets/firebase_credentials.json (Render Secret File)
+    3. ./firebase_credentials.json (local / app root)
     """
-
     global firebase_db
 
     if firebase_db is not None:
@@ -41,32 +41,39 @@ def initialize_firestore():
             firebase_db = firestore.client()
             return firebase_db
 
-        credentials_path = os.getenv(
-            "FIREBASE_CREDENTIALS",
-            "firebase_credentials.json"
-        )
+        env_creds = (os.getenv("FIREBASE_CREDENTIALS") or "").strip()
+        cred = None
 
-        if not os.path.exists(credentials_path):
+        if env_creds:
+            if env_creds.startswith("{"):
+                cred = credentials.Certificate(json.loads(env_creds))
+            elif os.path.exists(env_creds):
+                cred = credentials.Certificate(env_creds)
+
+        if cred is None:
+            for candidate_path in (
+                "/etc/secrets/firebase_credentials.json",
+                "firebase_credentials.json",
+            ):
+                if os.path.exists(candidate_path):
+                    cred = credentials.Certificate(candidate_path)
+                    break
+
+        if cred is None:
             print(
-                f"[FIREBASE WARNING] Credentials file not found: "
-                f"{credentials_path}"
+                "[FIREBASE WARNING] Credentials not found in FIREBASE_CREDENTIALS, "
+                "/etc/secrets/firebase_credentials.json, or firebase_credentials.json."
             )
-            print(
-                "[FIREBASE WARNING] Firestore history saving is disabled."
-            )
+            print("[FIREBASE WARNING] Firestore history saving is disabled.")
             return None
 
-        cred = credentials.Certificate(credentials_path)
         firebase_admin.initialize_app(cred)
         firebase_db = firestore.client()
-
         print("[FIREBASE] Firestore initialized successfully.")
         return firebase_db
 
     except Exception as e:
-        print(
-            f"[FIREBASE WARNING] Firestore initialization failed: {e}"
-        )
+        print(f"[FIREBASE WARNING] Firestore initialization failed: {e}")
         firebase_db = None
         return None
 
