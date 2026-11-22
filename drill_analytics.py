@@ -41,12 +41,18 @@ def initialize_firestore():
             firebase_db = firestore.client()
             return firebase_db
 
-        env_creds = (os.getenv("FIREBASE_CREDENTIALS") or "").strip()
+       env_creds = (os.getenv("FIREBASE_CREDENTIALS") or "").strip()
         cred = None
 
         if env_creds:
             if env_creds.startswith("{"):
-                cred = credentials.Certificate(json.loads(env_creds))
+                try:
+                    cred = credentials.Certificate(json.loads(env_creds))
+                except json.JSONDecodeError as je:
+                    print(
+                        f"[FIREBASE WARNING] FIREBASE_CREDENTIALS is not valid JSON ({je}); "
+                        "falling back to secret file paths."
+                    )
             elif os.path.exists(env_creds):
                 cred = credentials.Certificate(env_creds)
 
@@ -76,7 +82,6 @@ def initialize_firestore():
         print(f"[FIREBASE WARNING] Firestore initialization failed: {e}")
         firebase_db = None
         return None
-
 
 # Initialize at module load.
 initialize_firestore()
