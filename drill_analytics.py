@@ -36,12 +36,12 @@ def initialize_firestore():
     if firebase_db is not None:
         return firebase_db
 
-    try:
+  try:
         if firebase_admin._apps:
             firebase_db = firestore.client()
             return firebase_db
 
-       env_creds = (os.getenv("FIREBASE_CREDENTIALS") or "").strip()
+        env_creds = (os.getenv("FIREBASE_CREDENTIALS") or "").strip()
         cred = None
 
         if env_creds:
@@ -64,7 +64,6 @@ def initialize_firestore():
                 if os.path.exists(candidate_path):
                     cred = credentials.Certificate(candidate_path)
                     break
-
         if cred is None:
             print(
                 "[FIREBASE WARNING] Credentials not found in FIREBASE_CREDENTIALS, "
