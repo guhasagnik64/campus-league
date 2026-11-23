@@ -20,3 +20,34 @@ export const AVAILABLE_DRILLS = [
     { id: 'shooting', name: 'Shooting Precision', label: 'Shooting Precision' },
     { id: 'relay_dribble_pass', name: 'Relay Dribble & Open-Body Pass', label: 'Relay Dribble & Open-Body Pass' }
 ];
+
+export const DRILL_RULES = {
+    pass_support: {
+        groupSize: 3,
+        rules: [
+            "Player enters tracking zone",
+            "Player approaches cone / support lane",
+            "Pass accuracy & support movement meet drill criteria",
+            "Drill completed within time limit"
+        ]
+    },
+    ft_foot_outside_cut: {
+        groupSize: 1,
+        rules: [
+            "Player enters tracking zone",
+            "Player approaches cone",
+            "Left-foot outside cut executed cleanly",
+            "Close ball control maintained through cut",
+            "Drill completed within time limit"
+        ]
+    },
+    outside_cut: {
+        groupSize: 1,
+        rules: [
+            "Player enters tracking zone",
+            "Player approaches cone",
+            "Outside cut & scanning/vision check performed",
+            "Drill completed within time limit"
+        ]
+    }
+};
