@@ -110,21 +110,32 @@ def reset_session_intake(player_id="SA"):
             print(f"🧹 [SESSION CLOSED] Successfully purged intake photo: {intake_path}")
         except Exception as e:
             print(f"⚠️ [PURGE ERROR] Could not remove intake photo: {e}")
+
+def _cleanup_temp_video(video_path: str | None):
+    if video_path and os.path.exists(video_path):
+        try:
+            os.remove(video_path)
+        except OSError:
+            pass
 # =====================================================================
-# PASTE NEW /api/upload-analysis ENDPOINT HERE:
+# /api/upload-drill & /api/upload-analysis ENDPOINTS:
 # =====================================================================
+@app.post("/api/upload-drill")
 @app.post("/api/upload-analysis")
 async def upload_analysis(
     file: UploadFile = File(...),
     drillType: str = Form("inside_outside_touch_moving"),
+    drillName: str | None = Form(None),
     playerName: str = Form("Sagnik Guha"),
     playerId: str = Form("user_1793429157605"),
     groupId: str = Form("default_facility")
 ):
     global LEADERBOARD_CACHE, GROUP_LEADERBOARD_CACHE
+    video_path = None
     try:
         temp_dir = tempfile.gettempdir()
-        video_path = os.path.join(temp_dir, file.filename)
+        safe_name = os.path.basename(file.filename or "drill_upload.mp4")
+        video_path = os.path.join(temp_dir, safe_name)
         
         with open(video_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -148,11 +159,12 @@ async def upload_analysis(
         actual_score = top_player.get("ovr_score", 88)
         actual_speed = top_player.get("speed", "24.2 km/h")
         actual_pass = top_player.get("pass_acc", "88%")
+        resolved_drill_name = drillName or drillType.replace("_", " ").title()
 
         scorecard_entry = {
             "player_id": playerId,
             "name": playerName,
-            "drillName": drillType.replace("_", " ").title(),
+            "drillName": resolved_drill_name,
             "ovr_score": actual_score,
             "pass_accuracy": actual_pass,
             "speed": actual_speed,
@@ -172,6 +184,8 @@ async def upload_analysis(
     except Exception as e:
         print(f"⚠️ [UPLOAD-ANALYSIS ERROR]: {e}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        _cleanup_temp_video(video_path)
 
 # 1. Attire / Kit Profile Registration
 @app.post("/api/upload")
@@ -251,13 +265,15 @@ async def process_video(
     file: UploadFile = File(None),
     drillType: str = Form("3_player_side_swap"),
     playerName: str = Form("Arin"),
+    playerId: str | None = Form(None),
     coachId: str = Form("Coach Tamal"),
     groupId: str = Form("default_group")
 ):
     global LEADERBOARD_CACHE, GROUP_LEADERBOARD_CACHE
+    video_path = None
     try:
         temp_dir = tempfile.gettempdir()
-        video_path = os.path.join(temp_dir, file.filename) if file else "3_players_drill_1.mp4"
+        video_path = os.path.join(temp_dir, os.path.basename(file.filename)) if file and file.filename else "3_players_drill_1.mp4"
         
         if file:
             with open(video_path, "wb") as buffer:
@@ -322,6 +338,9 @@ async def process_video(
     except Exception as e:
         print(f"Processing error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if file:
+            _cleanup_temp_video(video_path)
 
 # 3. Leaderboard Endpoint
 @app.get("/api/leaderboard")
