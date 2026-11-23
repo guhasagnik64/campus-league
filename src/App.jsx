@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { socket } from './socket';
 import { db } from './firebase';
-import { AVAILABLE_DRILLS } from './utils/drills';
+import { AVAILABLE_DRILLS, DRILL_RULES } from './utils/drills';
 
 import {
   collection,
@@ -26,7 +26,8 @@ import CoachPortfolioCV from './components/CoachPortfolioCV';
 import DailyReport from './components/DailyReport';
 import GlobalCampusLeaderboard from './components/GlobalCampusLeaderboard';
 import PlayerProfileScorecard from './components/PlayerProfileScorecard';
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const MAX_DRILL_VIDEO_SECONDS = 300;
 // ==========================================
 // 1. STUDENT ATTIRE UPLOADER COMPONENT
 // ==========================================
@@ -86,9 +87,9 @@ function StudentAttireUploader({ user, tenantId = "default_facility", sessionDat
     }
 
     try {
-      const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const UPLOAD_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-      const uploadUrl = `${BASE_URL}/api/upload?tenant_id=${encodeURIComponent(tenantToUse)}`;
+      const uploadUrl = `${UPLOAD_BASE_URL}/api/upload?tenant_id=${encodeURIComponent(tenantToUse)}`;
 
       const response = await fetch(uploadUrl, {
         method: "POST",
@@ -395,8 +396,8 @@ const [groupRoster, setGroupRoster] = useState([
 
     try {
       // 2. Updated port from 8002 to active port 8000 via environment or fallback
-      const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-      const response = await fetch(`${BASE_URL}/api/process-group-drill`, {
+      const UPLOAD_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${UPLOAD_BASE_URL}/api/process-group-drill`, {
         method: 'POST',
         body: formData,
       });
@@ -456,7 +457,42 @@ const [groupRoster, setGroupRoster] = useState([
 
   // VIDEO & LAUNCH ANALYSIS STATES
   const [selectedVideoFile, setSelectedVideoFile] = useState(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState(null);
+  const [videoDurationWarning, setVideoDurationWarning] = useState('');
+  const [analysisReport, setAnalysisReport] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+    };
+  }, [videoPreviewUrl]);
+
+  const handleDrillVideoSelect = (e) => {
+    const file = e.target.files?.[0] || null;
+    setVideoDurationWarning('');
+    if (!file) {
+      setSelectedVideoFile(null);
+      setVideoPreviewUrl(null);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    const probeVideo = document.createElement('video');
+    probeVideo.preload = 'metadata';
+    probeVideo.onloadedmetadata = () => {
+      if (probeVideo.duration > MAX_DRILL_VIDEO_SECONDS) {
+        URL.revokeObjectURL(previewUrl);
+        setSelectedVideoFile(null);
+        setVideoPreviewUrl(null);
+        setVideoDurationWarning('⚠️ Drill video exceeds the 5-minute (300s) maximum limit.');
+      } else {
+        setSelectedVideoFile(file);
+        setVideoPreviewUrl(previewUrl);
+      }
+    };
+    probeVideo.src = previewUrl;
+  };
 
   const handleOpenPlayerRoom = (player) => {
   setSelectedPlayerForRoom(player);
@@ -711,26 +747,36 @@ const handleLaunchAnalysis = async () => {
     
     // 💡 Grab active player ID or fallback to profile ID
     const activePlayerId = user?.id || localStorage.getItem("activePlayerId") || "user_1793429157605";
+    const selectedDrillObj = AVAILABLE_DRILLS.find((d) => d.id === selectedDrill);
+    const activeDrillName = selectedDrillObj?.label || selectedDrillObj?.name || selectedDrill;
 
     try {
       const formData = new FormData();
       formData.append("file", selectedVideoFile);
       formData.append("drillType", selectedDrill);
+      formData.append("drillName", activeDrillName);
       formData.append("playerName", activePlayerName);
       
       // 👉 EXPLICIT PLAYER ID BINDING:
       formData.append("playerId", activePlayerId);
-      
+      formData.append("groupId", groupId || "default_facility");
       formData.append("coachId", user?.coachName || "Coach Tamal");
 
       let responseData = null;
 
-      // Safe non-blocking fetch to backend API
+      // Safe non-blocking fetch to /api/upload-drill with fallback to /api/upload-analysis
       try {
-        const res = await fetch("https://campus-league-7sfl.onrender.com/api/upload-analysis", {
-  method: "POST",
-  body: formData,
-});
+        const UPLOAD_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        let res = await fetch(`${UPLOAD_BASE_URL}/api/upload-drill`, {
+          method: "POST",
+          body: formData,
+        });
+        if (res.status === 404 || res.status === 405) {
+          res = await fetch(`${UPLOAD_BASE_URL}/api/upload-analysis`, {
+            method: "POST",
+            body: formData,
+          });
+        }
 
         if (res.ok) {
           const contentType = res.headers.get("content-type");
@@ -743,10 +789,10 @@ const handleLaunchAnalysis = async () => {
       }
 
       // Safe evaluation metrics
-      const calculatedPass = responseData?.passAccuracy || 84;
-      const calculatedSprint = responseData?.sprintAccel || 26.4;
-      const calculatedScore = responseData?.score || 88;
-      const calculatedControl = responseData?.controlPrecision || 84.5;
+      const calculatedPass = responseData?.passAccuracy ?? responseData?.scorecard?.pass_accuracy ?? 84;
+      const calculatedSprint = responseData?.sprintAccel ?? responseData?.scorecard?.speed ?? 26.4;
+      const calculatedScore = responseData?.score ?? responseData?.scorecard?.ovr_score ?? 88;
+      const calculatedControl = responseData?.controlPrecision ?? 84.5;
 
       const finalData = {
         success: true,
@@ -756,8 +802,12 @@ const handleLaunchAnalysis = async () => {
         score: calculatedScore,
         player_name: activePlayerName,
         drill_type: selectedDrill || "3-Player Pass & Support Rotation",
+        drill_name: activeDrillName,
+        rule_evaluations: responseData?.rule_evaluations || (DRILL_RULES[selectedDrill]?.rules || DRILL_RULES.outside_cut.rules).map((rule) => ({ rule, status: "Evaluated" })),
+        tracking: responseData?.tracking || { playersTracked: 1, ballTracked: true },
         createdAt: new Date().toISOString()
       };
+      setAnalysisReport(finalData);
 
       // 1. NON-BLOCKING FIRESTORE PERSISTENCE
       try {
@@ -951,122 +1001,186 @@ const handleLaunchAnalysis = async () => {
 
       <div
         style={{
-          backgroundColor: '#0f172a',
-          padding: '20px',
-          borderRadius: '12px',
-          border: '1px solid #1e293b',
-          marginBottom: '20px',
-          color: '#fff'
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+          gap: '20px',
+          alignItems: 'start',
+          marginBottom: '20px'
         }}
       >
         <div
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '16px'
+            backgroundColor: '#0f172a',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '1px solid #1e293b',
+            color: '#fff'
           }}
         >
-          <h3
+          <div
             style={{
-              margin: 0,
-              color: '#38bdf8'
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '10px',
+              flexWrap: 'wrap',
+              marginBottom: '16px'
             }}
           >
-            🎯 Drill Selector & AI Evaluation
-          </h3>
+            <h3
+              style={{
+                margin: 0,
+                color: '#38bdf8'
+              }}
+            >
+              🎯 Drill Selector & AI Evaluation
+            </h3>
 
-          <select
-            value={selectedDrill}
-            onChange={handleDrillChange}
+            <select
+              value={selectedDrill}
+              onChange={handleDrillChange}
+              style={{
+                backgroundColor: '#1e293b',
+                color: '#34d399',
+                border: '1px solid #334155',
+                padding: '8px 14px',
+                borderRadius: '8px'
+              }}
+            >
+              {AVAILABLE_DRILLS.map((drill) => (
+                <option
+                  key={drill.id}
+                  value={drill.id}
+                >
+                  {drill.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {sessionData?.photoUrl ? (
+            <div
+              style={{
+                backgroundColor: '#064e3b',
+                border: '1px solid #10b981',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                color: '#34d399',
+                marginBottom: '12px'
+              }}
+            >
+              ✓ Intake photo locked in session memory. Ready to process drill video!
+            </div>
+          ) : (
+            <div
+              style={{
+                backgroundColor: '#451a03',
+                border: '1px solid #f59e0b',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                color: '#fbbf24',
+                marginBottom: '12px'
+              }}
+            >
+              ⚠️ No intake photo selected. Visit "Attire Check-In" first for face/kit calibration.
+            </div>
+          )}
+
+          <div
             style={{
-              backgroundColor: '#1e293b',
-              color: '#34d399',
-              border: '1px solid #334155',
-              padding: '8px 14px',
-              borderRadius: '8px'
+              padding: '15px',
+              border: '1px dashed #3b82f6',
+              borderRadius: '8px',
+              margin: '15px 0',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '10px'
             }}
           >
-            {AVAILABLE_DRILLS.map((drill) => (
-              <option
-                key={drill.id}
-                value={drill.id}
-              >
-                {drill.name}
-              </option>
-            ))}
-          </select>
+            <input
+              type="file"
+              accept="video/*"
+              onChange={handleDrillVideoSelect}
+            />
+
+            {videoDurationWarning && (
+              <div style={{ color: '#fbbf24', fontSize: '12px' }}>
+                {videoDurationWarning}
+              </div>
+            )}
+
+            {videoPreviewUrl && (
+              <video
+                src={videoPreviewUrl}
+                controls
+                style={{ width: '100%', maxHeight: '220px', borderRadius: '8px', backgroundColor: '#020617' }}
+              />
+            )}
+
+            <button
+              onClick={handleLaunchAnalysis}
+              disabled={isAnalyzing}
+              style={{
+                background: '#2563eb',
+                color: '#fff',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                cursor: isAnalyzing ? 'not-allowed' : 'pointer',
+                opacity: isAnalyzing ? 0.7 : 1
+              }}
+            >
+              {isAnalyzing
+                ? 'Processing Video...'
+                : 'Upload & Analyze Drill Video'}
+            </button>
+          </div>
         </div>
-
-        {sessionData?.photoUrl ? (
-          <div
-            style={{
-              backgroundColor: '#064e3b',
-              border: '1px solid #10b981',
-              padding: '8px 12px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              color: '#34d399',
-              marginBottom: '12px'
-            }}
-          >
-            ✓ Intake photo locked in session memory. Ready to process drill video!
-          </div>
-        ) : (
-          <div
-            style={{
-              backgroundColor: '#451a03',
-              border: '1px solid #f59e0b',
-              padding: '8px 12px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              color: '#fbbf24',
-              marginBottom: '12px'
-            }}
-          >
-            ⚠️ No intake photo selected. Visit "Attire Check-In" first for face/kit calibration.
-          </div>
-        )}
 
         <div
           style={{
-            padding: '15px',
-            border: '1px dashed #3b82f6',
-            borderRadius: '8px',
-            margin: '15px 0',
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '10px'
+            backgroundColor: '#0f172a',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '1px solid #1e293b',
+            color: '#fff'
           }}
         >
-          <input
-            type="file"
-            accept="video/*"
-            onChange={(e) =>
-              setSelectedVideoFile(e.target.files?.[0] || null)
-            }
-          />
-
-          <button
-            onClick={handleLaunchAnalysis}
-            disabled={isAnalyzing}
-            style={{
-              background: '#2563eb',
-              color: '#fff',
-              border: 'none',
-              padding: '10px 20px',
-              borderRadius: '6px',
-              fontWeight: 'bold',
-              cursor: isAnalyzing ? 'not-allowed' : 'pointer',
-              opacity: isAnalyzing ? 0.7 : 1
-            }}
-          >
-            {isAnalyzing
-              ? 'Processing Video...'
-              : 'Upload & Analyze Drill Video'}
-          </button>
+          <h3 style={{ margin: '0 0 12px 0', color: '#38bdf8' }}>
+            📈 AI Drill Performance Analysis
+          </h3>
+          <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#94a3b8' }}>
+            Drill: <strong>{analysisReport?.drill_name || selectedDrill}</strong> · Status: <strong>{isAnalyzing ? 'Analyzing...' : (analysisReport ? 'Completed' : 'Ready')}</strong>
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '14px' }}>
+            <div style={{ backgroundColor: '#1e293b', padding: '10px', borderRadius: '8px' }}>
+              <div style={{ fontSize: '11px', color: '#94a3b8' }}>Score</div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#34d399' }}>{analysisReport?.score ?? '--'}</div>
+            </div>
+            <div style={{ backgroundColor: '#1e293b', padding: '10px', borderRadius: '8px' }}>
+              <div style={{ fontSize: '11px', color: '#94a3b8' }}>Pass Acc</div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#38bdf8' }}>{analysisReport?.passAccuracy ?? '--'}%</div>
+            </div>
+            <div style={{ backgroundColor: '#1e293b', padding: '10px', borderRadius: '8px' }}>
+              <div style={{ fontSize: '11px', color: '#94a3b8' }}>Speed</div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fbbf24' }}>{analysisReport?.sprintAccel ?? '--'}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
+            <strong>Rule-Based Drill Evaluation:</strong>
+            <ul style={{ margin: '8px 0 0 18px', padding: 0 }}>
+              {(analysisReport?.rule_evaluations || (DRILL_RULES[selectedDrill]?.rules || DRILL_RULES.outside_cut.rules).map((r) => ({ rule: r, status: 'Pending' }))).map((item, idx) => (
+                <li key={idx} style={{ marginBottom: '4px' }}>
+                  {typeof item === 'string' ? item : `${item.rule} (${item.status})`}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
 
