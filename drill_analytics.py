@@ -36,7 +36,7 @@ def initialize_firestore():
     if firebase_db is not None:
         return firebase_db
 
-  try:
+    try:
         if firebase_admin._apps:
             firebase_db = firestore.client()
             return firebase_db
@@ -55,7 +55,6 @@ def initialize_firestore():
                     )
             elif os.path.exists(env_creds):
                 cred = credentials.Certificate(env_creds)
-
         if cred is None:
             for candidate_path in (
                 "/etc/secrets/firebase_credentials.json",
