@@ -26,6 +26,59 @@ HOMOGRAPHY_MATRIX, _ = cv2.findHomography(SRC_PIXEL_PTS, DST_METER_PTS)
 # Raise it (e.g. 15) if player IDs start switching; lower it (e.g. 6) for even less memory/CPU.
 ANALYSIS_FPS = 10
 
+DRILL_PARAMETER_SPECS = {
+    "sprint_accel": {
+        "label": "Sprint / Movement Speed",
+        "unit": "km/h",
+        "target": ">= 15.0 km/h",
+        "min_val": 15.0,
+        "description": "Measures movement speed across tracked pitch segments during the drill.",
+    },
+    "pass_accuracy": {
+        "label": "Passing / Execution Accuracy",
+        "unit": "%",
+        "target": ">= 75%",
+        "min_val": 75.0,
+        "description": "Evaluates execution accuracy and control consistency during the drill.",
+    },
+    "lateral_displacement": {
+        "label": "Lateral Displacement / Cut Spread",
+        "unit": "m",
+        "target": ">= 1.5 m",
+        "min_val": 1.5,
+        "description": "Measures lateral pitch movement and directional change spread across calibrated coordinates.",
+    },
+}
+
+
+def build_player_parameters(sprint_speed, pass_acc, lateral_disp_m):
+    raw_items = [
+        ("sprint_accel", float(sprint_speed or 0.0)),
+        ("pass_accuracy", float(pass_acc or 0.0)),
+        ("lateral_displacement", round(float(lateral_disp_m or 0.0), 2)),
+    ]
+    parameters = []
+    for key, val in raw_items:
+        spec = DRILL_PARAMETER_SPECS[key]
+        passed = val >= spec["min_val"]
+        parameters.append({
+            "key": key,
+            "label": spec["label"],
+            "value": val,
+            "unit": spec["unit"],
+            "target": spec["target"],
+            "passed": passed,
+            "status": "PASS" if passed else "FAIL",
+            "description": spec["description"],
+            "reason": (
+                f"Met target ({val} {spec['unit']} vs {spec['target']})."
+                if passed
+                else f"Below target ({val} {spec['unit']}, required {spec['target']})."
+            ),
+        })
+    return parameters
+
+
 def get_real_world_coords(pixel_x, pixel_y):
     """Transforms video pixel coordinates into actual pitch metrics (meters)"""
     point = np.array([[[float(pixel_x), float(pixel_y)]]], dtype=np.float32)
@@ -142,6 +195,34 @@ def resolve_reid_identity_dynamic(crop_img, group_embeddings_db, threshold=0.45)
         return best_match, best_score
         
     return None, best_score
+
+
+def _find_matching_canonical_id(crop_emb, meter_x, meter_y, current_sec, canonical_players, max_gap_sec=6.0):
+    """Matches a reappearing detection against recently unseen canonical players."""
+    if crop_emb is None:
+        return None, 0.0
+
+    best_cid = None
+    best_score = -1.0
+
+    for cid, st in canonical_players.items():
+        gap_sec = current_sec - st["last_seen_sec"]
+        if gap_sec < 0 or gap_sec > max_gap_sec:
+            continue
+
+        vis_sim = compute_similarity(crop_emb, st.get("embedding"))
+        dist_m = float(np.hypot(meter_x - st["last_pos"][0], meter_y - st["last_pos"][1]))
+        max_plausible_m = max(3.0, gap_sec * 8.0)
+        prox_score = max(0.0, 1.0 - (dist_m / max_plausible_m))
+
+        combined = (0.65 * vis_sim) + (0.35 * prox_score)
+        if vis_sim >= 0.45 and combined > best_score:
+            best_score = combined
+            best_cid = cid
+
+    return best_cid, best_score
+
+
 # --- 4. MAIN COMPUTER VISION PIPELINE ---
 def process_drill_and_match_leaderboard(
     video_path,
@@ -158,6 +239,8 @@ def process_drill_and_match_leaderboard(
     cap = cv2.VideoCapture(video_path)
     registered_embeddings = build_registered_embeddings(registered_players_db)
     tracked_performance = {}
+    track_to_canonical = {}
+    canonical_counter = 0
 
     # [MEMORY FIX] Work out how many source frames to skip between analyzed frames.
     source_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -197,6 +280,8 @@ def process_drill_and_match_leaderboard(
             if results[0].keypoints is not None:
                 keypoints = results[0].keypoints.data.cpu().numpy()
 
+            current_sec = frame_index / source_fps
+
             for idx, (box, track_id) in enumerate(zip(boxes, track_ids)):
                 x1, y1, x2, y2 = map(int, box)
                 w_box = max(1, x2 - x1)
@@ -210,47 +295,97 @@ def process_drill_and_match_leaderboard(
                 meter_x, meter_y = get_real_world_coords(feet_x, feet_y)
                 meter_x, meter_y = float(meter_x), float(meter_y)
 
-                # Initialize or update player tracking data
-                if track_id not in tracked_performance:
-                    crop = frame[max(0, y1):min(frame.shape[0], y2), max(0, x1):min(frame.shape[1], x2)]
+                crop = frame[max(0, y1):min(frame.shape[0], y2), max(0, x1):min(frame.shape[1], x2)]
+                crop_emb = extract_visual_embedding(crop)
+
+                if track_id not in track_to_canonical:
                     matched_info, reid_score = resolve_reid_identity(crop, registered_embeddings)
 
-                    base64_crop = crop_player_avatar(frame, (x1, y1, x2, y2))
-                    
-                    p_name = matched_info["name"] if matched_info else f"Athlete #{track_id}"
-                    p_id = matched_info["player_id"] if matched_info else f"Tracked_{track_id}"
-                    p_group = matched_info["group_id"] if matched_info else (group_id or "default_group")
-                    is_registered = matched_info is not None
+                    if matched_info:
+                        canonical_id = matched_info["player_id"]
+                        p_name = matched_info["name"]
+                        p_group = matched_info["group_id"]
+                        is_registered = True
+                    else:
+                        reappeared_cid, reappeared_score = _find_matching_canonical_id(
+                            crop_emb, meter_x, meter_y, current_sec, tracked_performance
+                        )
+                        if reappeared_cid is not None:
+                            canonical_id = reappeared_cid
+                            existing_st = tracked_performance[canonical_id]
+                            p_name = existing_st["name"]
+                            p_group = existing_st["group_id"]
+                            is_registered = existing_st["is_registered"]
+                            reid_score = max(existing_st["reid_confidence"], reappeared_score)
+                        else:
+                            canonical_counter += 1
+                            canonical_id = f"Tracked_{track_id}" if f"Tracked_{track_id}" not in tracked_performance else f"Tracked_{track_id}_{canonical_counter}"
+                            p_name = f"Athlete #{track_id}"
+                            p_group = group_id or "default_group"
+                            is_registered = False
 
-                    tracked_performance[track_id] = {
-                        "track_id": track_id,
-                        "player_id": p_id,
-                        "name": p_name,
-                        "group_id": p_group,
-                        "avatar_crop": base64_crop,
-                        "video_crop": base64_crop,
-                        "is_registered": is_registered,
-                        "reid_confidence": round(reid_score, 2),
-                        "assigned_zone": active_zone,
-                        # [MEMORY FIX] running totals instead of an ever-growing positions list
-                        "last_pos": (meter_x, meter_y),
-                        "total_dist": 0.0,
-                        "n_pos": 1,
-                        "sum_x": meter_x,
-                        "sum_x2": meter_x * meter_x,
-                        "start_frame": frame_index,
-                        "last_frame": frame_index,
-                        "bbox": (x1, y1, x2, y2)
-                    }
+                    track_to_canonical[track_id] = canonical_id
+
+                    if canonical_id not in tracked_performance:
+                        base64_crop = crop_player_avatar(frame, (x1, y1, x2, y2))
+                        tracked_performance[canonical_id] = {
+                            "track_id": track_id,
+                            "player_id": canonical_id,
+                            "name": p_name,
+                            "group_id": p_group,
+                            "avatar_crop": base64_crop,
+                            "video_crop": base64_crop,
+                            "is_registered": is_registered,
+                            "reid_confidence": round(reid_score, 2),
+                            "assigned_zone": active_zone,
+                            "embedding": crop_emb,
+                            # [MEMORY FIX] running totals instead of an ever-growing positions list
+                            "last_pos": (meter_x, meter_y),
+                            "total_dist": 0.0,
+                            "n_pos": 1,
+                            "sum_x": meter_x,
+                            "sum_x2": meter_x * meter_x,
+                            "start_frame": frame_index,
+                            "last_frame": frame_index,
+                            "last_seen_sec": current_sec,
+                            "bbox": (x1, y1, x2, y2)
+                        }
+                    else:
+                        pdata_live = tracked_performance[canonical_id]
+                        gap_sec = max(0.0, current_sec - pdata_live["last_seen_sec"])
+                        # Only accumulate step distance across short gaps; avoid teleport spikes after longer absences
+                        if gap_sec <= 2.5:
+                            last_x, last_y = pdata_live["last_pos"]
+                            pdata_live["total_dist"] += float(np.sqrt((last_x - meter_x)**2 + (last_y - meter_y)**2))
+                        if crop_emb is not None and pdata_live.get("embedding") is not None:
+                            blended = (0.7 * pdata_live["embedding"]) + (0.3 * crop_emb)
+                            norm = np.linalg.norm(blended) + 1e-6
+                            pdata_live["embedding"] = blended / norm
+                        elif crop_emb is not None:
+                            pdata_live["embedding"] = crop_emb
+                        pdata_live["track_id"] = track_id
+                        pdata_live["last_pos"] = (meter_x, meter_y)
+                        pdata_live["n_pos"] += 1
+                        pdata_live["sum_x"] += meter_x
+                        pdata_live["sum_x2"] += meter_x * meter_x
+                        pdata_live["last_frame"] = frame_index
+                        pdata_live["last_seen_sec"] = current_sec
+                        pdata_live["bbox"] = (x1, y1, x2, y2)
                 else:
-                    pdata_live = tracked_performance[track_id]
+                    canonical_id = track_to_canonical[track_id]
+                    pdata_live = tracked_performance[canonical_id]
                     last_x, last_y = pdata_live["last_pos"]
                     pdata_live["total_dist"] += float(np.sqrt((last_x - meter_x)**2 + (last_y - meter_y)**2))
+                    if crop_emb is not None and pdata_live.get("embedding") is not None:
+                        blended = (0.85 * pdata_live["embedding"]) + (0.15 * crop_emb)
+                        norm = np.linalg.norm(blended) + 1e-6
+                        pdata_live["embedding"] = blended / norm
                     pdata_live["last_pos"] = (meter_x, meter_y)
                     pdata_live["n_pos"] += 1
                     pdata_live["sum_x"] += meter_x
                     pdata_live["sum_x2"] += meter_x * meter_x
                     pdata_live["last_frame"] = frame_index
+                    pdata_live["last_seen_sec"] = current_sec
                     pdata_live["bbox"] = (x1, y1, x2, y2)
 
     cap.release()
@@ -260,7 +395,7 @@ def process_drill_and_match_leaderboard(
 
     # Calculate detailed drill stats via drill_analytics module
     leaderboard_players = []
-    for track_id, pdata in tracked_performance.items():
+    for canonical_id, pdata in tracked_performance.items():
         total_frames = max(1, pdata["last_frame"] - pdata["start_frame"])
         completion_time = round(total_frames / source_fps, 2)  # uses the video's real fps (falls back to 30)
 
@@ -297,6 +432,7 @@ def process_drill_and_match_leaderboard(
         ovr_score = analytics_result.get("score") or analytics_result.get("ovr_rating", 75)
         sprint_speed = analytics_result.get("sprint_acceleration_rate", calc_speed_kmh)
         pass_acc = analytics_result.get("passing_accuracy", 85)
+        player_params = build_player_parameters(sprint_speed, pass_acc, lateral_disp)
 
         leaderboard_players.append({
             "name": pdata["name"],
@@ -313,6 +449,7 @@ def process_drill_and_match_leaderboard(
             "speed": f"{sprint_speed} km/h" if pdata["is_registered"] else "🔒 Locked",
             "pass_acc": f"{pass_acc}%" if pdata["is_registered"] else "🔒 Locked",
             "ovr_score": ovr_score,
+            "parameters": player_params,
             "coach_feedback": analytics_result.get("coach_feedback", [])
         })
 

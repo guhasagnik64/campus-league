@@ -199,12 +199,9 @@ analysis_lock = threading.Semaphore(1)
 
 
 def is_dribbling_drill(drill_id):
-    """Cone / slalom / dribbling drills use the real ball-and-cone analysis.
-    'dribble_pass' style drills stay on the original engine."""
+    """Cone / slalom / dribbling drills use the real ball-and-cone analysis."""
     d = (drill_id or "").lower()
-    if "pass" in d:
-        return False
-    return any(key in d for key in ("dribbl", "slalom", "outside_cut", "ft_foot", "cone"))
+    return any(key in d for key in ("dribbl", "slalom", "outside_cut", "foot", "cone"))
 
 
 def build_engine_cmd(save_path, drill_id, drill_type, tenant_id, facility_type, player_id, player_name):
@@ -239,11 +236,11 @@ def register_player():
         group_id = request.form.get('group_id') or request.form.get('tenant_id') or 'default_facility'
 
         stamp_url = ""
-        if 'file' in request.files and request.files['file'].filename:
-            f = request.files['file']
-            stamp_path = os.path.join(STAMP_DIR, f.filename)
-            f.save(stamp_path)
-            stamp_url = f"/player_stamps/{f.filename}"
+        uploaded_photo = request.files.get('file') or request.files.get('photo')
+        if uploaded_photo and uploaded_photo.filename:
+            stamp_path = os.path.join(STAMP_DIR, uploaded_photo.filename)
+            uploaded_photo.save(stamp_path)
+            stamp_url = f"/player_stamps/{uploaded_photo.filename}"
 
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -278,19 +275,19 @@ def upload_file():
     if request.method == 'OPTIONS':
         return jsonify({'status': 'ok'}), 200
     try:
-        if 'file' not in request.files:
+        file = request.files.get('file') or request.files.get('video')
+        if not file:
             return jsonify({'error': 'No file uploaded'}), 400
 
-        file = request.files['file']
         if file.filename == '':
             return jsonify({'error': 'No file chosen'}), 400
 
-        drill_id = request.form.get('drill_id', 'dribble_pass')
-        drill_type = request.form.get('drill_type', 'passing')
-        player_name = request.form.get('player_name', 'Sagnik Guha')
-        player_id = request.form.get('player_id') or player_name
-        tenant_id = request.form.get('tenant_id', 'default_facility')
-        facility_type = request.form.get('facility_type', 'ACADEMY')
+        drill_id = request.form.get('drill_id') or request.form.get('drillType') or 'dribble_pass'
+        drill_type = request.form.get('drill_type') or request.form.get('drillType') or 'passing'
+        player_name = request.form.get('player_name') or request.form.get('playerName') or 'Sagnik Guha'
+        player_id = request.form.get('player_id') or request.form.get('playerId') or player_name
+        tenant_id = request.form.get('tenant_id') or request.form.get('tenantId') or 'default_facility'
+        facility_type = request.form.get('facility_type') or request.form.get('facilityType') or 'ACADEMY'
 
         save_path = os.path.join(VIDEO_DIR, file.filename)
         file.save(save_path)
@@ -327,7 +324,7 @@ def upload_file():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/upload', methods=['POST', 'OPTIONS'])
+@app.route('/api/upload', methods=['POST', 'GET', 'OPTIONS'])
 def api_upload_alias():
     if request.method == 'OPTIONS':
         return jsonify({'status': 'ok'}), 200
@@ -644,6 +641,13 @@ def serve_stream_file(filename):
     return jsonify({}), 200
 
 
+@app.route('/videos/<path:filename>', methods=['GET'])
+def serve_video_file(filename):
+    if os.path.exists(os.path.join(VIDEO_DIR, filename)):
+        return send_from_directory(VIDEO_DIR, filename)
+    return jsonify({"error": "Video not found"}), 404
+
+
 @app.route('/api/live-metrics', methods=['GET'])
 def get_live_metrics():
     return jsonify([]), 200
@@ -767,13 +771,6 @@ def get_player_room_reports(player_id="Sagnik Guha"):
         return jsonify({"reports": [dict(row) for row in rows]}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/upload', methods=['POST', 'GET', 'OPTIONS'])
-def api_upload_query_alias():
-    if request.method == 'OPTIONS':
-        return jsonify({'status': 'ok'}), 200
-    return upload_file()
 
 
 if __name__ == '__main__':
