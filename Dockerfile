@@ -27,8 +27,10 @@ RUN pip3 install --no-cache-dir --upgrade pip
 COPY requirements.txt ./
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy backend server code
+# Copy backend server code and tracker/model assets if present
 COPY *.py ./
+COPY custom_bytetrack.yaml* ./
+COPY trackers/ ./trackers/
 
 # Copy the compiled React frontend from Stage 1
 COPY --from=frontend-build /app/dist ./dist
